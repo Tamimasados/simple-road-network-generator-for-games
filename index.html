@@ -1,0 +1,3383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Road Network Generator — Layers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-panel:#0B1B2C;
+    --bg-canvas:#0E2136;
+    --grid-line:rgba(140,190,230,0.08);
+    --grid-line-strong:rgba(140,190,230,0.16);
+    --ink-primary:#F4EFE2;
+    --ink-secondary:#7FB4DA;
+    --ink-tertiary:#4E7999;
+    --ink-spur:#E8B45E;
+    --zone-fill:rgba(84,138,94,0.16);
+    --zone-stroke:rgba(120,178,128,0.55);
+    --node-fill:#F4EFE2;
+    --node-ring:#0E2136;
+    --accent:#E0973C;
+    --accent-dim:#7A5527;
+    --text-main:#DCE7F0;
+    --text-dim:#6E8AA3;
+    --panel-border:#1E3A52;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg-canvas);font-family:'IBM Plex Sans',sans-serif;color:var(--text-main);}
+  #app{display:flex;height:100vh;min-height:560px;}
+
+  #panel{
+    width:320px;min-width:320px;background:var(--bg-panel);border-right:1px solid var(--panel-border);
+    padding:20px 18px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;
+  }
+  #panel h1{font-size:15px;letter-spacing:0.04em;margin:0 0 2px;font-weight:600;color:var(--ink-primary);}
+  #panel .sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);margin:0 0 4px;line-height:1.5;}
+
+  .layer-block{border:1px solid var(--panel-border);border-radius:6px;padding:12px 12px 13px;display:flex;flex-direction:column;gap:9px;}
+  .layer-head{display:flex;align-items:center;justify-content:space-between;}
+  .layer-title{font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.08em;color:var(--accent);text-transform:uppercase;}
+
+  .field{display:flex;flex-direction:column;gap:5px;}
+  .field label{
+    font-family:'IBM Plex Mono',monospace;font-size:10.8px;color:var(--text-dim);
+    display:flex;justify-content:space-between;
+  }
+  .field label span.val{color:var(--ink-secondary);}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:3px;background:var(--panel-border);border-radius:2px;outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer;
+    border:2px solid var(--bg-panel);
+  }
+  input[type=number]{
+    background:var(--bg-canvas);border:1px solid var(--panel-border);color:var(--text-main);
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;padding:5px 7px;border-radius:4px;width:100%;
+  }
+  .row{display:flex;gap:6px;align-items:center;}
+  button{
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:0.02em;
+    background:var(--bg-canvas);color:var(--text-main);border:1px solid var(--panel-border);
+    padding:8px 10px;border-radius:4px;cursor:pointer;transition:border-color .15s,color .15s;
+  }
+  button:hover{border-color:var(--ink-secondary);color:var(--ink-primary);}
+  button.primary{background:var(--accent-dim);border-color:var(--accent);color:var(--ink-primary);}
+  button.primary:hover{background:var(--accent);color:#1a1204;}
+  button.wide{width:100%;}
+  button.dice{padding:6px 9px;flex-shrink:0;}
+  .seed-row input[type=number]{flex:1;}
+  input.val-input{
+    width:56px;flex:0 0 56px;padding:4px 5px;font-size:10.5px;text-align:right;
+    color:var(--ink-secondary);
+  }
+
+  hr{border:none;border-top:1px solid var(--panel-border);margin:2px 0;}
+
+  #stats{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text-dim);line-height:1.85;}
+  #stats b{color:var(--ink-secondary);font-weight:500;}
+  #stats .warn{color:var(--ink-spur);}
+  #stats .seedtag{color:var(--text-dim);opacity:0.7;}
+
+  #legend{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text-dim);display:flex;flex-direction:column;gap:6px;}
+  .leg-item{display:flex;align-items:center;gap:8px;}
+  .leg-swatch{width:22px;height:0;flex-shrink:0;}
+  .leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--ink-primary);}
+  .code-tag{margin-left:auto;padding-left:8px;color:var(--text-dim);opacity:0.75;font-size:9.5px;white-space:nowrap;}
+
+  #canvasWrap{flex:1;min-width:0;position:relative;overflow:hidden;}
+  #sidePanel{
+    width:300px;min-width:300px;background:var(--bg-panel);border-left:1px solid var(--panel-border);
+    padding:20px 18px 16px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;
+  }
+
+  #calcOverlay{
+    position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+    background:rgba(11,27,44,0.72);backdrop-filter:blur(1.5px);z-index:10;
+  }
+  #calcSpinner{
+    width:38px;height:38px;border-radius:50%;
+    border:3px solid var(--panel-border);border-top-color:var(--accent);
+    animation:calc-spin 0.8s linear infinite;
+  }
+  @keyframes calc-spin{ to{ transform:rotate(360deg); } }
+  #calcText{font-family:'IBM Plex Sans',sans-serif;font-size:14px;color:var(--ink-primary);font-weight:500;}
+  #calcSubtext{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);min-height:16px;}
+  svg{width:100%;height:100%;display:block;}
+
+  #panel::-webkit-scrollbar{width:6px;}
+  #panel::-webkit-scrollbar-thumb{background:var(--panel-border);border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="panel">
+    <div>
+      <h1>ROAD NETWORK — LAYERS</h1>
+      <p class="sub">Each layer has its own seed and settings. Changing one layer’s seed leaves earlier layers untouched.</p>
+    </div>
+
+    <button class="wide" id="randAllBtn">🎲 Shuffle all seeds</button>
+
+    <div class="layer-block">
+      <div class="layer-head"><span class="layer-title">Layer 1 — major</span></div>
+      <div class="field row seed-row">
+        <input type="number" id="l1Seed">
+        <button class="dice" data-layer="l1">🎲</button>
+      </div>
+      <div class="field"><label>Count</label><div class="row"><input type="range" id="l1Count" min="2" max="15" step="1" style="flex:1"><input type="number" id="l1CountVal" class="val-input" min="2" max="15" step="1"></div></div>
+      <div class="field"><label>Spacing</label><div class="row"><input type="range" id="l1Spacing" min="0.15" max="2.0" step="0.05" style="flex:1"><input type="number" id="l1SpacingVal" class="val-input" min="0.15" max="2.0" step="0.05"></div></div>
+      <div class="field"><label>Extra links</label><div class="row"><input type="range" id="l1Loop" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l1LoopVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="field"><label>Curviness</label><div class="row"><input type="range" id="l1Curve" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l1CurveVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="section-label" style="margin-top:2px;">Terrain — points</div>
+      <div class="field"><label>Heightmap resolution <span class="code-tag" id="l1TerrainResM">— m/cell</span></label><div class="row"><input type="range" id="l1TerrainRes" min="80" max="2000" step="10" style="flex:1"><input type="number" id="l1TerrainResVal" class="val-input" min="80" max="2000" step="10"></div></div>
+      <div class="field"><label>Min. suitable height</label><div class="row"><input type="range" id="l1TerrainMinH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l1TerrainMinHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Max. suitable height</label><div class="row"><input type="range" id="l1TerrainMaxH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l1TerrainMaxHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Influence on points</label><div class="row"><input type="range" id="l1TerrainPointInfluence" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l1TerrainPointInfluenceVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="section-label" style="margin-top:2px;">Terrain — roads</div>
+      <div class="field"><label>Max. grade <span class="code-tag" id="l1TerrainMaxGradePct">— %</span></label><div class="row"><input type="range" id="l1TerrainMaxGrade" min="0.05" max="0.6" step="0.01" style="flex:1"><input type="number" id="l1TerrainMaxGradeVal" class="val-input" min="0.05" max="0.6" step="0.01"></div></div>
+      <div class="field"><label>Grade penalty</label><div class="row"><input type="range" id="l1TerrainSlopeCost" min="0" max="3" step="0.1" style="flex:1"><input type="number" id="l1TerrainSlopeCostVal" class="val-input" min="0" max="3" step="0.1"></div></div>
+      <div class="field"><label>Min. road height</label><div class="row"><input type="range" id="l1RoadMinH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l1RoadMinHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Max. road height</label><div class="row"><input type="range" id="l1RoadMaxH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l1RoadMaxHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Offset from point <span class="code-tag" id="l1RoadStartOffsetM">— m</span></label><div class="row"><input type="range" id="l1RoadStartOffset" min="0" max="500" step="10" style="flex:1"><input type="number" id="l1RoadStartOffsetVal" class="val-input" min="0" max="500" step="10"></div></div>
+      <div class="field"><label>Road attraction</label><div class="row"><input type="range" id="l1RoadAttraction" min="0" max="100" step="5" style="flex:1"><input type="number" id="l1RoadAttractionVal" class="val-input" min="0" max="100" step="5"></div></div>
+      <div class="section-label" style="margin-top:2px;">Post-processing (×4)</div>
+      <div class="field"><label>Resample step <span class="code-tag" id="l1PpSampleStepM">— m</span></label><div class="row"><input type="range" id="l1PpSampleStep" min="3" max="50" step="1" style="flex:1"><input type="number" id="l1PpSampleStepVal" class="val-input" min="3" max="50" step="1"></div></div>
+      <div class="field"><label>Proximity threshold <span class="code-tag" id="l1PpThresholdM">— m</span></label><div class="row"><input type="range" id="l1PpThreshold" min="40" max="1200" step="20" style="flex:1"><input type="number" id="l1PpThresholdVal" class="val-input" min="40" max="1200" step="20"></div></div>
+      <div class="field"><label>Acceptable overlap <span class="code-tag" id="l1PpFractionM">— m</span></label><div class="row"><input type="range" id="l1PpFraction" min="40" max="2000" step="20" style="flex:1"><input type="number" id="l1PpFractionVal" class="val-input" min="40" max="2000" step="20"></div></div>
+      <div class="field"><label>Merge nearby junctions <span class="code-tag" id="l1PpSnapM">— m</span></label><div class="row"><input type="range" id="l1PpSnap" min="20" max="600" step="20" style="flex:1"><input type="number" id="l1PpSnapVal" class="val-input" min="20" max="600" step="20"></div></div>
+    </div>
+
+    <div class="layer-block">
+      <div class="layer-head"><span class="layer-title">Layer 2 — medium</span></div>
+      <div class="field row seed-row">
+        <input type="number" id="l2Seed">
+        <button class="dice" data-layer="l2">🎲</button>
+      </div>
+      <div class="field"><label>Count</label><div class="row"><input type="range" id="l2Count" min="0" max="300" step="1" style="flex:1"><input type="number" id="l2CountVal" class="val-input" min="0" max="300" step="1"></div></div>
+      <div class="field"><label>Tether distance (max.)</label><div class="row"><input type="range" id="l2Tether" min="40" max="400" step="5" style="flex:1"><input type="number" id="l2TetherVal" class="val-input" min="40" max="400" step="5"></div></div>
+      <div class="field"><label>Network clearance (min.)</label><div class="row"><input type="range" id="l2MinTether" min="0" max="120" step="5" style="flex:1"><input type="number" id="l2MinTetherVal" class="val-input" min="0" max="120" step="5"></div></div>
+      <div class="field"><label>Spacing</label><div class="row"><input type="range" id="l2Spacing" min="0.15" max="2.0" step="0.05" style="flex:1"><input type="number" id="l2SpacingVal" class="val-input" min="0.15" max="2.0" step="0.05"></div></div>
+      <div class="field"><label>Extra links</label><div class="row"><input type="range" id="l2Loop" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l2LoopVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="field"><label>Curviness</label><div class="row"><input type="range" id="l2Curve" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l2CurveVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="section-label" style="margin-top:2px;">Terrain — points</div>
+      <div class="field"><label>Heightmap resolution <span class="code-tag" id="l2TerrainResM">— m/cell</span></label><div class="row"><input type="range" id="l2TerrainRes" min="80" max="2000" step="10" style="flex:1"><input type="number" id="l2TerrainResVal" class="val-input" min="80" max="2000" step="10"></div></div>
+      <div class="field"><label>Min. suitable height</label><div class="row"><input type="range" id="l2TerrainMinH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l2TerrainMinHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Max. suitable height</label><div class="row"><input type="range" id="l2TerrainMaxH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l2TerrainMaxHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Influence on points</label><div class="row"><input type="range" id="l2TerrainPointInfluence" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l2TerrainPointInfluenceVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="section-label" style="margin-top:2px;">Terrain — roads</div>
+      <div class="field"><label>Max. grade <span class="code-tag" id="l2TerrainMaxGradePct">— %</span></label><div class="row"><input type="range" id="l2TerrainMaxGrade" min="0.05" max="0.6" step="0.01" style="flex:1"><input type="number" id="l2TerrainMaxGradeVal" class="val-input" min="0.05" max="0.6" step="0.01"></div></div>
+      <div class="field"><label>Grade penalty</label><div class="row"><input type="range" id="l2TerrainSlopeCost" min="0" max="3" step="0.1" style="flex:1"><input type="number" id="l2TerrainSlopeCostVal" class="val-input" min="0" max="3" step="0.1"></div></div>
+      <div class="field"><label>Min. road height</label><div class="row"><input type="range" id="l2RoadMinH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l2RoadMinHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Max. road height</label><div class="row"><input type="range" id="l2RoadMaxH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l2RoadMaxHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Offset from point <span class="code-tag" id="l2RoadStartOffsetM">— m</span></label><div class="row"><input type="range" id="l2RoadStartOffset" min="0" max="500" step="10" style="flex:1"><input type="number" id="l2RoadStartOffsetVal" class="val-input" min="0" max="500" step="10"></div></div>
+      <div class="field"><label>Road attraction</label><div class="row"><input type="range" id="l2RoadAttraction" min="0" max="100" step="5" style="flex:1"><input type="number" id="l2RoadAttractionVal" class="val-input" min="0" max="100" step="5"></div></div>
+      <div class="section-label" style="margin-top:2px;">Post-processing (×2)</div>
+      <div class="field"><label>Resample step <span class="code-tag" id="l2PpSampleStepM">— m</span></label><div class="row"><input type="range" id="l2PpSampleStep" min="3" max="50" step="1" style="flex:1"><input type="number" id="l2PpSampleStepVal" class="val-input" min="3" max="50" step="1"></div></div>
+      <div class="field"><label>Proximity threshold <span class="code-tag" id="l2PpThresholdM">— m</span></label><div class="row"><input type="range" id="l2PpThreshold" min="20" max="600" step="10" style="flex:1"><input type="number" id="l2PpThresholdVal" class="val-input" min="20" max="600" step="10"></div></div>
+      <div class="field"><label>Acceptable overlap <span class="code-tag" id="l2PpFractionM">— m</span></label><div class="row"><input type="range" id="l2PpFraction" min="20" max="1000" step="10" style="flex:1"><input type="number" id="l2PpFractionVal" class="val-input" min="20" max="1000" step="10"></div></div>
+      <div class="field"><label>Merge nearby junctions <span class="code-tag" id="l2PpSnapM">— m</span></label><div class="row"><input type="range" id="l2PpSnap" min="10" max="300" step="10" style="flex:1"><input type="number" id="l2PpSnapVal" class="val-input" min="10" max="300" step="10"></div></div>
+    </div>
+
+    <div class="layer-block">
+      <div class="layer-head"><span class="layer-title">Layer 3 — minor</span></div>
+      <div class="field row seed-row">
+        <input type="number" id="l3Seed">
+        <button class="dice" data-layer="l3">🎲</button>
+      </div>
+      <div class="field"><label>Count</label><div class="row"><input type="range" id="l3Count" min="0" max="1000" step="1" style="flex:1"><input type="number" id="l3CountVal" class="val-input" min="0" max="1000" step="1"></div></div>
+      <div class="field"><label>Tether distance (max.)</label><div class="row"><input type="range" id="l3Tether" min="15" max="250" step="5" style="flex:1"><input type="number" id="l3TetherVal" class="val-input" min="15" max="250" step="5"></div></div>
+      <div class="field"><label>Network clearance (min.)</label><div class="row"><input type="range" id="l3MinTether" min="0" max="80" step="5" style="flex:1"><input type="number" id="l3MinTetherVal" class="val-input" min="0" max="80" step="5"></div></div>
+      <div class="field"><label>Spacing</label><div class="row"><input type="range" id="l3Spacing" min="0.15" max="2.0" step="0.05" style="flex:1"><input type="number" id="l3SpacingVal" class="val-input" min="0.15" max="2.0" step="0.05"></div></div>
+      <div class="field"><label>Extra links</label><div class="row"><input type="range" id="l3Loop" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l3LoopVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="field"><label>Curviness</label><div class="row"><input type="range" id="l3Curve" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l3CurveVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="section-label" style="margin-top:2px;">Terrain — points</div>
+      <div class="field"><label>Heightmap resolution <span class="code-tag" id="l3TerrainResM">— m/cell</span></label><div class="row"><input type="range" id="l3TerrainRes" min="80" max="2000" step="10" style="flex:1"><input type="number" id="l3TerrainResVal" class="val-input" min="80" max="2000" step="10"></div></div>
+      <div class="field"><label>Min. suitable height</label><div class="row"><input type="range" id="l3TerrainMinH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l3TerrainMinHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Max. suitable height</label><div class="row"><input type="range" id="l3TerrainMaxH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l3TerrainMaxHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Influence on points</label><div class="row"><input type="range" id="l3TerrainPointInfluence" min="0" max="1" step="0.05" style="flex:1"><input type="number" id="l3TerrainPointInfluenceVal" class="val-input" min="0" max="1" step="0.05"></div></div>
+      <div class="section-label" style="margin-top:2px;">Terrain — roads</div>
+      <div class="field"><label>Max. grade <span class="code-tag" id="l3TerrainMaxGradePct">— %</span></label><div class="row"><input type="range" id="l3TerrainMaxGrade" min="0.05" max="0.6" step="0.01" style="flex:1"><input type="number" id="l3TerrainMaxGradeVal" class="val-input" min="0.05" max="0.6" step="0.01"></div></div>
+      <div class="field"><label>Grade penalty</label><div class="row"><input type="range" id="l3TerrainSlopeCost" min="0" max="3" step="0.1" style="flex:1"><input type="number" id="l3TerrainSlopeCostVal" class="val-input" min="0" max="3" step="0.1"></div></div>
+      <div class="field"><label>Min. road height</label><div class="row"><input type="range" id="l3RoadMinH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l3RoadMinHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Max. road height</label><div class="row"><input type="range" id="l3RoadMaxH" min="0" max="1" step="0.02" style="flex:1"><input type="number" id="l3RoadMaxHVal" class="val-input" min="0" max="1" step="0.02"></div></div>
+      <div class="field"><label>Offset from point <span class="code-tag" id="l3RoadStartOffsetM">— m</span></label><div class="row"><input type="range" id="l3RoadStartOffset" min="0" max="500" step="10" style="flex:1"><input type="number" id="l3RoadStartOffsetVal" class="val-input" min="0" max="500" step="10"></div></div>
+      <div class="field"><label>Road attraction</label><div class="row"><input type="range" id="l3RoadAttraction" min="0" max="100" step="5" style="flex:1"><input type="number" id="l3RoadAttractionVal" class="val-input" min="0" max="100" step="5"></div></div>
+      <div class="section-label" style="margin-top:2px;">Post-processing (×1)</div>
+      <div class="field"><label>Resample step <span class="code-tag" id="l3PpSampleStepM">— m</span></label><div class="row"><input type="range" id="l3PpSampleStep" min="3" max="50" step="1" style="flex:1"><input type="number" id="l3PpSampleStepVal" class="val-input" min="3" max="50" step="1"></div></div>
+      <div class="field"><label>Proximity threshold <span class="code-tag" id="l3PpThresholdM">— m</span></label><div class="row"><input type="range" id="l3PpThreshold" min="10" max="300" step="5" style="flex:1"><input type="number" id="l3PpThresholdVal" class="val-input" min="10" max="300" step="5"></div></div>
+      <div class="field"><label>Acceptable overlap <span class="code-tag" id="l3PpFractionM">— m</span></label><div class="row"><input type="range" id="l3PpFraction" min="10" max="500" step="5" style="flex:1"><input type="number" id="l3PpFractionVal" class="val-input" min="10" max="500" step="5"></div></div>
+      <div class="field"><label>Merge nearby junctions <span class="code-tag" id="l3PpSnapM">— m</span></label><div class="row"><input type="range" id="l3PpSnap" min="5" max="150" step="5" style="flex:1"><input type="number" id="l3PpSnapVal" class="val-input" min="5" max="150" step="5"></div></div>
+    </div>
+
+    <div class="layer-block">
+      <div class="layer-head">
+        <span class="layer-title">Terrain</span>
+        <label class="row" style="gap:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);">
+          <input type="checkbox" id="terrainEnabled" style="width:13px;height:13px;">enable
+        </label>
+      </div>
+
+      <div class="field row" style="gap:12px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--text-dim);">
+        <label class="row" style="gap:4px;"><input type="radio" name="terrainSource" id="terrainSourceProc" value="proc" checked>procedural</label>
+        <label class="row" style="gap:4px;"><input type="radio" name="terrainSource" id="terrainSourceImg" value="img">image</label>
+      </div>
+
+      <div id="terrainProcFields">
+        <div class="field row seed-row">
+          <input type="number" id="terrainSeed">
+          <button class="dice" data-layer="terrain">🎲</button>
+        </div>
+        <div class="field"><label>Noise scale</label><div class="row"><input type="range" id="terrainScale" min="0.02" max="0.25" step="0.005" style="flex:1"><input type="number" id="terrainScaleVal" class="val-input" min="0.02" max="0.25" step="0.005"></div></div>
+        <div class="field"><label>Octaves</label><div class="row"><input type="range" id="terrainOctaves" min="1" max="6" step="1" style="flex:1"><input type="number" id="terrainOctavesVal" class="val-input" min="1" max="6" step="1"></div></div>
+      </div>
+
+      <div id="terrainImgFields" style="display:none;">
+        <div class="field">
+          <input type="file" id="terrainFile" accept="image/*" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);width:100%;">
+          <div id="terrainFileStatus" style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:var(--text-dim);margin-top:4px;">no file selected</div>
+        </div>
+      </div>
+
+      <div class="field"><label>Elevation range <span class="code-tag" id="terrainRangeM">— m</span></label><div class="row"><input type="range" id="terrainRange" min="20" max="400" step="5" style="flex:1"><input type="number" id="terrainRangeVal" class="val-input" min="20" max="400" step="5"></div></div>
+      <div class="field"><label>Map side, km</label><div class="row"><input type="number" id="terrainKm" min="0.1" max="10000" step="0.1" style="width:100%;"></div></div>
+
+      <div class="field row" style="gap:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px;">
+        <input type="checkbox" id="terrainShow" checked style="width:13px;height:13px;">show terrain on map
+      </div>
+    </div>
+
+    <div class="layer-block">
+      <div class="layer-head"><span class="layer-title">Road post-processing — shared</span></div>
+      <div class="field row" style="gap:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);">
+        <input type="checkbox" id="ppPrune" checked style="width:13px;height:13px;">remove duplicate (parallel) roads
+      </div>
+      <div class="field row" style="gap:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);">
+        <input type="checkbox" id="ppCross" checked style="width:13px;height:13px;">resolve crossings into junctions
+      </div>
+      <div class="field"><label>Max. arms per junction</label><div class="row"><input type="range" id="ppMaxDegree" min="3" max="6" step="1" style="flex:1"><input type="number" id="ppMaxDegreeVal" class="val-input" min="3" max="6" step="1"></div></div>
+      <div class="field"><label>Redundancy threshold</label><div class="row"><input type="range" id="ppDetour" min="1" max="4" step="0.1" style="flex:1"><input type="number" id="ppDetourVal" class="val-input" min="1" max="4" step="0.1"></div></div>
+    </div>
+
+    <div class="layer-block">
+      <div class="layer-head">
+        <span class="layer-title">Empty zones (forest)</span>
+        <label class="row" style="gap:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);">
+          <input type="checkbox" id="zoneShow" style="width:13px;height:13px;">show
+        </label>
+      </div>
+      <div class="field"><label>Network clearance</label><div class="row"><input type="range" id="zoneClearance" min="10" max="80" step="2" style="flex:1"><input type="number" id="zoneClearanceVal" class="val-input" min="10" max="80" step="2"></div></div>
+      <div class="field"><label>Grid cell size</label><div class="row"><input type="range" id="zoneCell" min="8" max="30" step="1" style="flex:1"><input type="number" id="zoneCellVal" class="val-input" min="8" max="30" step="1"></div></div>
+      <div class="field"><label>Min. zone size (cells)</label><div class="row"><input type="range" id="zoneMinCells" min="1" max="60" step="1" style="flex:1"><input type="number" id="zoneMinCellsVal" class="val-input" min="1" max="60" step="1"></div></div>
+    </div>
+
+    <button class="primary wide" id="regenBtn">↻ Rebuild network</button>
+    <div id="genStatus" style="display:none;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--accent);text-align:center;"></div>
+
+  </div>
+
+  <div id="canvasWrap">
+    <svg id="svg" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet"></svg>
+    <div id="calcOverlay">
+      <div id="calcSpinner"></div>
+      <div id="calcText">Rebuilding network…</div>
+      <div id="calcSubtext"></div>
+    </div>
+  </div>
+
+  <div id="sidePanel">
+    <div class="section-label">Statistics</div>
+    <div id="stats"></div>
+    <div class="section-label">Legend</div>
+    <div id="legend">
+      <div class="leg-item"><span class="leg-swatch" style="border-top:3.2px solid var(--ink-primary)"></span> Highway (layer 1) <span class="code-tag">kind:1 role:1|2</span></div>
+      <div class="leg-item"><span class="leg-swatch" style="border-top:1.8px solid var(--ink-secondary)"></span> Road (layer 2) <span class="code-tag">kind:2 role:1|2</span></div>
+      <div class="leg-item"><span class="leg-swatch" style="border-top:1.2px solid var(--ink-tertiary)"></span> Trail (layer 3) <span class="code-tag">kind:3 role:1|2</span></div>
+      <div class="leg-item"><span class="leg-dot" style="width:13px;height:13px;border:2px solid var(--accent);background:var(--ink-primary)"></span> Major node <span class="code-tag">layer:1</span></div>
+      <div class="leg-item"><span class="leg-dot" style="width:9px;height:9px"></span> Medium node <span class="code-tag">layer:2</span></div>
+      <div class="leg-item"><span class="leg-dot" style="width:5px;height:5px"></span> Minor node <span class="code-tag">layer:3</span></div>
+      <div class="leg-item"><span class="leg-dot" style="width:6px;height:6px;background:var(--ink-secondary)"></span> Junction (crossing) <span class="code-tag">layer:4</span></div>
+      <div class="leg-item"><span class="leg-swatch" style="border-top:8px solid var(--zone-fill);border-bottom:1px solid var(--zone-stroke)"></span> Empty zone (forest) <span class="code-tag">emptyZones[]</span></div>
+      <div class="leg-item" style="opacity:0.7;font-size:10px;margin-top:2px;">role: 1 — backbone, 2 — loop/connector</div>
+    </div>
+    <div class="section-label">JSON export</div>
+    <div class="field"><label>Canvas (cells)</label><div class="row"><input type="range" id="exGrid" min="8" max="128" step="1" style="flex:1"><input type="number" id="exGridVal" class="val-input" min="8" max="128" step="1"></div></div>
+    <div class="field"><label>Points per cell</label><div class="row"><input type="range" id="exDensity" min="1" max="10" step="1" style="flex:1"><input type="number" id="exDensityVal" class="val-input" min="1" max="10" step="1"></div></div>
+    <div class="row">
+      <button class="wide" id="exportSvgBtn">⭳ SVG</button>
+      <button class="wide" id="exportJsonBtn">⭳ JSON</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const W = 800, H = 800, MARGIN = 30;
+const svg = document.getElementById('svg');
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+// ---------- seeded RNG ----------
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ---------- heightmap: procedural noise + image loading + sampling ----------
+let HEIGHT_COLS = 220, HEIGHT_ROWS = 220;
+
+class Heightmap{
+  constructor(cols, rows, data){ this.cols = cols; this.rows = rows; this.data = data; }
+  get(gx,gy){
+    gx = Math.max(0, Math.min(this.cols-1, gx));
+    gy = Math.max(0, Math.min(this.rows-1, gy));
+    return this.data[gy*this.cols+gx];
+  }
+  sample(x,y){ // x,y in canvas units [0,W]x[0,H] -> bilinear-interpolated height 0..1
+    const fx = (x/W)*(this.cols-1), fy = (y/H)*(this.rows-1);
+    const gx0=Math.floor(fx), gy0=Math.floor(fy);
+    const tx=fx-gx0, ty=fy-gy0;
+    const v00=this.get(gx0,gy0), v10=this.get(gx0+1,gy0);
+    const v01=this.get(gx0,gy0+1), v11=this.get(gx0+1,gy0+1);
+    const a=v00+(v10-v00)*tx, b=v01+(v11-v01)*tx;
+    return a+(b-a)*ty;
+  }
+  slopeAt(x,y){ // gradient magnitude, in normalized-height per world-unit
+    const eps = (W/this.cols)*0.5;
+    const h0=this.sample(x,y);
+    const hx=this.sample(Math.min(W,x+eps), y);
+    const hy=this.sample(x, Math.min(H,y+eps));
+    return Math.hypot((hx-h0)/eps, (hy-h0)/eps);
+  }
+}
+
+function makeValueNoise2D(seed){
+  const rng = mulberry32(seed);
+  const gridSize = 48;
+  const lattice = new Float32Array(gridSize*gridSize);
+  for(let i=0;i<lattice.length;i++) lattice[i]=rng();
+  function latticeVal(ix,iy){
+    const x=((ix%gridSize)+gridSize)%gridSize;
+    const y=((iy%gridSize)+gridSize)%gridSize;
+    return lattice[y*gridSize+x];
+  }
+  function smooth(t){ return t*t*t*(t*(t*6-15)+10); }
+  function noise2(x,y){
+    const x0=Math.floor(x), y0=Math.floor(y);
+    const tx=smooth(x-x0), ty=smooth(y-y0);
+    const v00=latticeVal(x0,y0), v10=latticeVal(x0+1,y0);
+    const v01=latticeVal(x0,y0+1), v11=latticeVal(x0+1,y0+1);
+    const a=v00+(v10-v00)*tx, b=v01+(v11-v01)*tx;
+    return a+(b-a)*ty;
+  }
+  function fbm(x,y,octaves){
+    let sum=0, amp=0.5, freq=1, norm=0;
+    for(let o=0;o<octaves;o++){
+      sum += noise2(x*freq,y*freq)*amp;
+      norm += amp;
+      amp*=0.5; freq*=2.05;
+    }
+    return sum/norm;
+  }
+  return {fbm};
+}
+
+function generateProceduralHeightmap(cols, rows, seed, scale, octaves){
+  const noise = makeValueNoise2D(seed);
+  const data = new Float32Array(cols*rows);
+  // sample in a resolution-independent coordinate: a fixed reference span (80 "cells"
+  // worth" of scale) across the map, regardless of how many grid cells cols/rows
+  // actually is. This way raising the resolution slider only adds sampling density,
+  // it never changes the terrain's real-world steepness.
+  for(let gy=0; gy<rows; gy++){
+    for(let gx=0; gx<cols; gx++){
+      const nx = (gx/cols) * 80 * scale;
+      const ny = (gy/rows) * 80 * scale;
+      data[gy*cols+gx] = noise.fbm(nx, ny, octaves);
+    }
+  }
+  let mn=Infinity, mx=-Infinity;
+  for(const v of data){ if(v<mn) mn=v; if(v>mx) mx=v; }
+  const range = (mx-mn)||1;
+  for(let i=0;i<data.length;i++) data[i] = (data[i]-mn)/range;
+  return new Heightmap(cols, rows, data);
+}
+
+function heightmapFromImageData(imageData, cols, rows){
+  const data = new Float32Array(cols*rows);
+  const px = imageData.data;
+  for(let i=0;i<cols*rows;i++){
+    data[i] = (0.299*px[i*4] + 0.587*px[i*4+1] + 0.114*px[i*4+2]) / 255;
+  }
+  return new Heightmap(cols, rows, data);
+}
+
+function terrainColorRamp(v){
+  const stops = [
+    [0.00, [20,45,58]],
+    [0.35, [45,74,58]],
+    [0.60, [92,86,58]],
+    [0.82, [120,104,78]],
+    [1.00, [176,176,170]]
+  ];
+  for(let i=0;i<stops.length-1;i++){
+    const [t0,c0]=stops[i], [t1,c1]=stops[i+1];
+    if(v>=t0 && v<=t1){
+      const t=(v-t0)/((t1-t0)||1);
+      return [c0[0]+(c1[0]-c0[0])*t, c0[1]+(c1[1]-c0[1])*t, c0[2]+(c1[2]-c0[2])*t].map(Math.round);
+    }
+  }
+  return stops[stops.length-1][1];
+}
+
+// how acceptable a spot is for a settlement: 1 = fine, 0 = never accept.
+// elevationRange is passed in explicitly (rather than read off `t`) because `t` is a
+// per-layer settings object (minH/maxH/pointInfluence/...) and elevationRange is a
+// property of the shared terrain, not of any one layer -- keeping it a separate
+// argument means a caller can never silently omit it the way `t.elevationRange`
+// could (that exact mistake once made this scoring collapse to NaN and made the
+// elevation/slope constraint on points a no-op).
+function suitabilityAt(heightmap, x, y, t, elevationRange){
+  const hRaw = heightmap.sample(x,y);
+  const slope = heightmap.slopeAt(x,y);
+  let elevScore = 1;
+  if(hRaw < t.minH) elevScore = Math.max(0, 1 - (t.minH-hRaw)/0.12);
+  else if(hRaw > t.maxH) elevScore = Math.max(0, 1 - (hRaw-t.maxH)/0.12);
+  const slopeScore = Math.max(0, 1 - slope*elevationRange*3.5);
+  const combined = elevScore*slopeScore;
+  return 1 - t.pointInfluence + t.pointInfluence*combined;
+}
+
+// ---------- geometry helpers ----------
+function dist(a,b){ return Math.hypot(a[0]-b[0], a[1]-b[1]); }
+
+// ---------- spatial hash grid ----------
+class SpatialGrid{
+  constructor(cellSize){ this.cellSize = cellSize; this.cells = new Map(); }
+  key(x,y){ return (Math.floor(x/this.cellSize))+'_'+(Math.floor(y/this.cellSize)); }
+  insert(p){
+    const k = this.key(p[0],p[1]);
+    if(!this.cells.has(k)) this.cells.set(k, []);
+    this.cells.get(k).push(p);
+  }
+  anyWithin(x, y, r){
+    const cx = Math.floor(x/this.cellSize), cy = Math.floor(y/this.cellSize);
+    const span = Math.max(1, Math.ceil(r/this.cellSize));
+    for(let dx=-span; dx<=span; dx++){
+      for(let dy=-span; dy<=span; dy++){
+        const arr = this.cells.get((cx+dx)+'_'+(cy+dy));
+        if(!arr) continue;
+        for(const p of arr){
+          if((p[0]-x)*(p[0]-x)+(p[1]-y)*(p[1]-y) < r*r) return true;
+        }
+      }
+    }
+    return false;
+  }
+  // distance to the nearest inserted point within maxR, or null if none are that
+  // close -- used to score "how attractive is it to route through here because an
+  // existing road already passes nearby" (see roadAttractionWeight).
+  nearestDist(x, y, maxR){
+    const cx = Math.floor(x/this.cellSize), cy = Math.floor(y/this.cellSize);
+    const span = Math.max(1, Math.ceil(maxR/this.cellSize));
+    let best = maxR, found = false;
+    for(let dx=-span; dx<=span; dx++){
+      for(let dy=-span; dy<=span; dy++){
+        const arr = this.cells.get((cx+dx)+'_'+(cy+dy));
+        if(!arr) continue;
+        for(const p of arr){
+          const d = Math.hypot(p[0]-x, p[1]-y);
+          if(d < best){ best = d; found = true; }
+        }
+      }
+    }
+    return found ? best : null;
+  }
+}
+
+// ---------- self-contained Delaunay triangulation (Bowyer-Watson) ----------
+function circumcircle(a,b,c){
+  const ax=a[0],ay=a[1],bx=b[0],by=b[1],cx=c[0],cy=c[1];
+  const d = 2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));
+  if(Math.abs(d) < 1e-9) return null;
+  const ux = ((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d;
+  const uy = ((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d;
+  const r = Math.hypot(ax-ux, ay-uy);
+  return {x:ux, y:uy, r};
+}
+
+function bowyerWatson(points){
+  const n = points.length;
+  if(n < 3) return [];
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  points.forEach(p=>{ minX=Math.min(minX,p[0]); minY=Math.min(minY,p[1]); maxX=Math.max(maxX,p[0]); maxY=Math.max(maxY,p[1]); });
+  const deltaMax = Math.max(maxX-minX, maxY-minY, 1) * 10;
+  const midx=(minX+maxX)/2, midy=(minY+maxY)/2;
+  const pts = points.concat([
+    [midx-deltaMax, midy-deltaMax],
+    [midx, midy+deltaMax*2],
+    [midx+deltaMax, midy-deltaMax]
+  ]);
+  const i1=n, i2=n+1, i3=n+2;
+  let triangles = [[i1,i2,i3]];
+
+  const edgeKey = (a,b) => a<b ? a+'_'+b : b+'_'+a;
+
+  for(let i=0; i<n; i++){
+    const p = pts[i];
+    const bad = [];
+    const badSet = new Set();
+    for(const tri of triangles){
+      const cc = circumcircle(pts[tri[0]], pts[tri[1]], pts[tri[2]]);
+      if(cc && Math.hypot(p[0]-cc.x, p[1]-cc.y) < cc.r + 1e-7){ bad.push(tri); badSet.add(tri); }
+    }
+    const edgeCount = new Map();
+    for(const tri of bad){
+      [[tri[0],tri[1]],[tri[1],tri[2]],[tri[2],tri[0]]].forEach(([a,b])=>{
+        const k = edgeKey(a,b);
+        edgeCount.set(k, (edgeCount.get(k)||0)+1);
+      });
+    }
+    triangles = triangles.filter(tri => !badSet.has(tri));
+    for(const tri of bad){
+      [[tri[0],tri[1]],[tri[1],tri[2]],[tri[2],tri[0]]].forEach(([a,b])=>{
+        if(edgeCount.get(edgeKey(a,b)) === 1) triangles.push([a,b,i]);
+      });
+    }
+  }
+
+  return triangles.filter(tri => tri[0]<n && tri[1]<n && tri[2]<n);
+}
+
+class UnionFind{
+  constructor(n){ this.parent = Array.from({length:n},(_,i)=>i); this.rank = new Array(n).fill(0); }
+  find(x){ while(this.parent[x]!==x){ this.parent[x]=this.parent[this.parent[x]]; x=this.parent[x]; } return x; }
+  union(a,b){
+    const ra=this.find(a), rb=this.find(b);
+    if(ra===rb) return false;
+    if(this.rank[ra]<this.rank[rb]) this.parent[ra]=rb;
+    else if(this.rank[ra]>this.rank[rb]) this.parent[rb]=ra;
+    else { this.parent[rb]=ra; this.rank[ra]++; }
+    return true;
+  }
+}
+
+// ---------- terrain-aware road pathfinding ----------
+class MinHeap{
+  constructor(){ this.arr = []; }
+  get size(){ return this.arr.length; }
+  push(item){
+    this.arr.push(item);
+    let i = this.arr.length-1;
+    while(i>0){
+      const p = (i-1)>>1;
+      if(this.arr[p].f <= this.arr[i].f) break;
+      [this.arr[p],this.arr[i]] = [this.arr[i],this.arr[p]];
+      i = p;
+    }
+  }
+  pop(){
+    const top = this.arr[0];
+    const last = this.arr.pop();
+    if(this.arr.length>0){
+      this.arr[0]=last;
+      let i=0;
+      while(true){
+        const l=2*i+1, r=2*i+2;
+        let smallest=i;
+        if(l<this.arr.length && this.arr[l].f<this.arr[smallest].f) smallest=l;
+        if(r<this.arr.length && this.arr[r].f<this.arr[smallest].f) smallest=r;
+        if(smallest===i) break;
+        [this.arr[smallest],this.arr[i]]=[this.arr[i],this.arr[smallest]];
+        i=smallest;
+      }
+    }
+    return top;
+  }
+}
+
+// Rich direction set (not just 8-way): includes shallow angles like (3,1)/(1,3) so
+// A* can find genuinely gentle zigzag routes on steep terrain, not just ~45° diagonals.
+function gcd(a,b){ while(b){ [a,b]=[b,a%b]; } return a; }
+const TERRAIN_DIRS = (() => {
+  const dirs = [];
+  const R = 6;
+  for(let dx=-R; dx<=R; dx++){
+    for(let dy=-R; dy<=R; dy++){
+      if(dx===0 && dy===0) continue;
+      if(gcd(Math.abs(dx),Math.abs(dy)) !== 1) continue;
+      dirs.push([dx,dy,Math.hypot(dx,dy)]);
+    }
+  }
+  return dirs;
+})();
+
+// A* over the heightmap grid with a hard per-step grade limit: a step steeper than
+// maxGrade is simply not a legal move, which is what forces the path to switchback
+// sideways across a slope instead of climbing it directly.
+function findTerrainPath(heightmap, startWorld, endWorld, ropts){
+  const cols=heightmap.cols, rows=heightmap.rows;
+  const cellW = W/cols, cellH = H/rows;
+  const cellSize = (cellW+cellH)/2;
+
+  const sx = Math.round(startWorld[0]/cellW), sy = Math.round(startWorld[1]/cellH);
+  const ex = Math.round(endWorld[0]/cellW), ey = Math.round(endWorld[1]/cellH);
+
+  const straightDist = Math.hypot(ex-sx, ey-sy);
+  const margin = Math.max(5, Math.round(straightDist*ropts.marginFactor)+4);
+  const minGX = Math.max(0, Math.min(sx,ex)-margin), maxGX = Math.min(cols-1, Math.max(sx,ex)+margin);
+  const minGY = Math.max(0, Math.min(sy,ey)-margin), maxGY = Math.min(rows-1, Math.max(sy,ey)+margin);
+
+  function hAt(gx,gy){ return heightmap.get(gx,gy) * ropts.elevationRange; }
+  function heuristic(gx,gy){ return Math.hypot(gx-ex,gy-ey)*cellSize; }
+  function k(gx,gy){ return gx+'_'+gy; }
+
+  // Walks every sub-step of a (possibly multi-cell) jump and checks EACH one against
+  // maxGrade -- a jump is only legal if the whole stretch it covers is legal, not
+  // just its two endpoints. Returns the total step cost, or null if any sub-step
+  // is too steep. Cost is normalized against costNormGrade rather than maxGrade
+  // itself, so a caller can loosen the hard cutoff (to avoid giving up on
+  // connectivity) without also erasing the preference for gentler ground -- if both
+  // used maxGrade, inflating it to "basically unconstrained" would make grade/maxGrade
+  // collapse to ~0 for any real slope, and the search would degenerate into a plain
+  // shortest path that ignores the terrain entirely.
+  const costNormGrade = ropts.costNormGrade || ropts.maxGrade;
+  // Roads can additionally be confined to an elevation band (roadMinH/roadMaxH, in the
+  // same raw 0..1 heightmap units as the point-placement minH/maxH sliders) -- e.g. to
+  // keep a road out of a valley below roadMinH or off a peak above roadMaxH, on top of
+  // (not instead of) the maxGrade steepness limit. roadElevTolerance widens that band
+  // by a flat amount; fallback retries below loosen it the same way maxGrade is loosened,
+  // so an elevation band that would otherwise strand a road never actually breaks
+  // connectivity -- it just gets relaxed a tier at a time.
+  const roadMinH = ropts.roadMinH != null ? ropts.roadMinH : 0;
+  const roadMaxH = ropts.roadMaxH != null ? ropts.roadMaxH : 1;
+  const roadElevTolerance = ropts.roadElevTolerance || 0;
+  const bandLo = roadMinH - roadElevTolerance, bandHi = roadMaxH + roadElevTolerance;
+  // Optional pull toward already-built roads (roadAttractionWeight, 0..1): a cell
+  // near an existing road's sampled points gets a cost discount, so that when
+  // several destinations are reachable through roughly the same terrain-optimal
+  // corridor, A* prefers to actually run ALONG the road that's already there for
+  // as long as that's still heading the right way, and only peels off once it
+  // stops being useful -- instead of tracing an independent, near-identical path
+  // a few meters to the side of it. attractionGrid is only ever set on the
+  // single-threaded call path (see toEdgeObjs' sequential branch), never sent to
+  // a worker, since it's a live SpatialGrid instance, not serializable state.
+  const attractionGrid = ropts.attractionGrid || null;
+  const attractionWeight = attractionGrid ? Math.max(0, Math.min(1, ropts.roadAttractionWeight || 0)) : 0;
+  const attractionRadius = ropts.roadAttractionRadius || 0;
+  function evaluateJump(ax,ay,bx,by,distMul){
+    const ds = distMul*cellSize;
+    const subSteps = Math.max(1, Math.round(distMul));
+    // Read the jump's starting height with the SAME function used for every step
+    // along it. It used to come from hAt() (a direct grid lookup) while the steps
+    // came from sample() (bilinear, in world coordinates), and the two disagree:
+    // sample() maps world to grid as (x/W)*(cols-1) while a grid cell sits at
+    // gx*(W/cols), so the same cell reads slightly differently each way. The gap
+    // reaches ~50% of one cell's real rise, which lands entirely on the first
+    // step of every jump and inflates its grade. Gentle-but-legal moves were
+    // being thrown out because of it: on a uniform 12.5% ramp, NO route at all
+    // could be found below 12.5%, even though angling across the slope makes any
+    // grade achievable. Measured consistently, the same search returns 1.05x
+    // length at a 12% limit and 5.1x with switchbacks at 3%.
+    let prevH = heightmap.sample(ax*cellW, ay*cellH) * ropts.elevationRange;
+    let cost = 0;
+    for(let i=1;i<=subSteps;i++){
+      const t = i/subSteps;
+      const gx = ax+(bx-ax)*t, gy = ay+(by-ay)*t;
+      const hRaw = heightmap.sample(gx*cellW, gy*cellH);
+      if(hRaw < bandLo || hRaw > bandHi) return null;
+      const h = hRaw * ropts.elevationRange;
+      const subDs = ds/subSteps;
+      const grade = Math.abs(h-prevH)/subDs;
+      if(grade > ropts.maxGrade) return null;
+      let stepCost = subDs*(1 + ropts.slopeCostWeight*(grade/costNormGrade));
+      if(attractionWeight > 0 && attractionRadius > 0){
+        const d = attractionGrid.nearestDist(gx*cellW, gy*cellH, attractionRadius);
+        if(d != null){
+          const proximity = 1 - d/attractionRadius; // 0 at the edge of the radius, 1 right on the existing road
+          stepCost *= (1 - attractionWeight*proximity*0.95); // never quite hits zero cost, to keep A* well-behaved
+        }
+      }
+      cost += stepCost;
+      prevH = h;
+    }
+    return cost;
+  }
+
+  const startK = k(sx,sy), goalK = k(ex,ey);
+  const gScore = new Map([[startK, 0]]);
+  const cameFrom = new Map();
+  const open = new MinHeap();
+  open.push({gx:sx, gy:sy, f:heuristic(sx,sy)});
+  const closed = new Set();
+
+  let found = false, iterations=0;
+  const maxIterations = (maxGX-minGX+1)*(maxGY-minGY+1)*4;
+
+  while(open.size>0 && iterations++ < maxIterations){
+    const cur = open.pop();
+    const ck = k(cur.gx,cur.gy);
+    // A cell can sit in the heap several times over (once per cheaper route found
+    // to it); every copy after the first pops as already-closed and is skipped in
+    // O(1). Those skips were being charged against the iteration budget, and they
+    // dominate it -- measured at 84% of the cap on a failing search, which gave up
+    // having actually examined only 25k of the 40k cells available to it. Counting
+    // only real expansions lets a search use the budget it was meant to have; it
+    // can only ever rescue searches that used to give up early, since one that
+    // already reached its goal stopped there regardless.
+    if(closed.has(ck)) { iterations--; continue; }
+    closed.add(ck);
+    if(ck===goalK){ found=true; break; }
+
+    const curG = gScore.get(ck);
+
+    for(const [dx,dy,distMul] of TERRAIN_DIRS){
+      const nx=cur.gx+dx, ny=cur.gy+dy;
+      if(nx<minGX||nx>maxGX||ny<minGY||ny>maxGY) continue;
+      const nk = k(nx,ny);
+      if(closed.has(nk)) continue;
+      const stepCost = evaluateJump(cur.gx,cur.gy,nx,ny,distMul);
+      if(stepCost===null) continue; // too steep somewhere along the jump -> forces a detour
+      const tentativeG = curG+stepCost;
+      if(!gScore.has(nk) || tentativeG < gScore.get(nk)){
+        gScore.set(nk, tentativeG);
+        cameFrom.set(nk, ck);
+        open.push({gx:nx, gy:ny, f:tentativeG+heuristic(nx,ny)});
+      }
+    }
+  }
+
+  if(!found) return null;
+
+  const pathKeys=[goalK];
+  let ck=goalK;
+  while(ck!==startK){
+    const p = cameFrom.get(ck);
+    if(!p) return null;
+    pathKeys.push(p);
+    ck=p;
+  }
+  pathKeys.reverse();
+  const worldPts = pathKeys.map(kk=>{ const [gx,gy]=kk.split('_').map(Number); return [gx*cellW, gy*cellH]; });
+  // the grid snaps start/end to the nearest cell center, which can be up to ~half
+  // a cell off the actual requested coordinates -- force them back exactly so the
+  // road always visibly reaches the real node, not a rounded stand-in for it.
+  worldPts[0] = [startWorld[0], startWorld[1]];
+  worldPts[worldPts.length-1] = [endWorld[0], endWorld[1]];
+  return worldPts;
+}
+
+function douglasPeucker(points, tolerance){
+  if(points.length<3) return points.slice();
+  function perpDist(p,a,b){
+    const dx=b[0]-a[0], dy=b[1]-a[1];
+    const len2=dx*dx+dy*dy;
+    if(len2<1e-9) return Math.hypot(p[0]-a[0], p[1]-a[1]);
+    let t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/len2;
+    t=Math.max(0,Math.min(1,t));
+    return Math.hypot(p[0]-(a[0]+t*dx), p[1]-(a[1]+t*dy));
+  }
+  function rdp(pts){
+    if(pts.length<3) return pts;
+    let maxDist=0, idx=0;
+    for(let i=1;i<pts.length-1;i++){
+      const d=perpDist(pts[i], pts[0], pts[pts.length-1]);
+      if(d>maxDist){ maxDist=d; idx=i; }
+    }
+    if(maxDist>tolerance){
+      const left=rdp(pts.slice(0,idx+1));
+      const right=rdp(pts.slice(idx));
+      return left.slice(0,-1).concat(right);
+    }
+    return [pts[0], pts[pts.length-1]];
+  }
+  return rdp(points);
+}
+
+// Returns the point where segments p1-p2 and p3-p4 cross, or null if they don't
+// (parallel/collinear counts as "don't", and touching only at a shared endpoint
+// doesn't count either -- t/u are kept strictly inside (0,1)).
+function segmentIntersection(p1,p2,p3,p4){
+  const d1x=p2[0]-p1[0], d1y=p2[1]-p1[1];
+  const d2x=p4[0]-p3[0], d2y=p4[1]-p3[1];
+  const denom = d1x*d2y - d1y*d2x;
+  if(Math.abs(denom) < 1e-9) return null;
+  const t = ((p3[0]-p1[0])*d2y - (p3[1]-p1[1])*d2x) / denom;
+  const u = ((p3[0]-p1[0])*d1y - (p3[1]-p1[1])*d1x) / denom;
+  if(t>1e-4 && t<1-1e-4 && u>1e-4 && u<1-1e-4){
+    return [p1[0]+t*d1x, p1[1]+t*d1y];
+  }
+  return null;
+}
+
+// A single road's own path can end up curling back and crossing itself -- e.g. a
+// terrain-constrained, heavily-attracted route forced to switchback so hard it
+// loops all the way around and re-crosses ground it already covered. That's a
+// different problem from two DIFFERENT roads overlapping (mergeParallelCorridors'
+// job): here it's one edge's polyline self-intersecting, so no junction should
+// ever appear -- the loop is just pointless extra distance and visual clutter. This
+// walks the polyline for any two non-adjacent segments that cross, and every time
+// it finds one, splices out everything between them (replacing that whole looping
+// detour with the single crossing point), then re-scans until nothing crosses
+// anymore. Non-adjacent only: two segments that share an endpoint (i and i+1)
+// trivially "touch" there and aren't a loop.
+function stripSelfIntersections(points){
+  let pts = points.slice();
+  let iterations = 0;
+  let changed = true;
+  while(changed && iterations++ < 200){
+    changed = false;
+    for(let i=0;i<pts.length-1 && !changed;i++){
+      for(let j=pts.length-2;j>i+1;j--){
+        const ip = segmentIntersection(pts[i], pts[i+1], pts[j], pts[j+1]);
+        if(ip){
+          pts = pts.slice(0,i+1).concat([ip], pts.slice(j+1));
+          changed = true;
+          break;
+        }
+      }
+    }
+  }
+  return pts;
+}
+
+// Tries A* with a modest search margin; if no legal path exists (grade limit too
+// strict for the terrain), retries with progressively looser grade/margin so a
+// road essentially never gives up on following the terrain shape (even if that
+// means violating the requested max grade somewhere for one bad stretch) -- an
+// occasional steep patch reads as "steep local pathfinding compromise", but a road
+// that ignores the terrain entirely and just curves randomly looks like a glitch
+// next to roads that hug it closely. Only if even a near-unconstrained search
+// fails (should essentially never happen) does it fall back to the plain curve.
+function terrainPathOrFallback(rng, p1, p2, curviness, heightmap, ropts){
+  if(heightmap){
+    // A short straight "driveway" at each end, in this edge's own exact bearing,
+    // stops multiple roads leaving the same point from all being pulled into the
+    // same terrain-optimal corridor right next to the point -- since the terrain
+    // often makes one direction locally best for several neighbors at once, A*
+    // alone would happily send them all out along the same line before splitting.
+    // Skipping terrain search for this short lead-in/out (searching only between
+    // the offset points, then stitching the straight stretch back on) forces each
+    // edge's initial and final bearing to stay unique to it, so post-processing's
+    // corridor merge only has real, farther-out overlaps to consider, not this
+    // artificial bunching at the endpoints. Capped so it can't eat more than 40%
+    // of a short edge from each side (and skipped entirely if that would leave
+    // no room for a path in between).
+    const totalDist = Math.hypot(p2[0]-p1[0], p2[1]-p1[1]);
+    const offset = Math.min(Math.max(0, ropts.startOffset || 0), totalDist*0.4);
+    let sp1 = p1, sp2 = p2, hasLeadIn = false, hasLeadOut = false;
+    if(offset > 1 && totalDist - offset*2 > 1){
+      const ux = (p2[0]-p1[0])/totalDist, uy = (p2[1]-p1[1])/totalDist;
+      sp1 = [p1[0]+ux*offset, p1[1]+uy*offset];
+      sp2 = [p2[0]-ux*offset, p2[1]-uy*offset];
+      hasLeadIn = true; hasLeadOut = true;
+    }
+    let tier = 1;
+    let path = findTerrainPath(heightmap, sp1, sp2, ropts);
+    if(!path){
+      tier = 2;
+      path = findTerrainPath(heightmap, sp1, sp2, {
+        ...ropts,
+        maxGrade: ropts.maxGrade*2.2,
+        costNormGrade: ropts.maxGrade,
+        slopeCostWeight: ropts.slopeCostWeight*1.3,
+        marginFactor: ropts.marginFactor*1.8,
+        roadElevTolerance: (ropts.roadElevTolerance||0) + 0.15
+      });
+    }
+    if(!path){
+      tier = 3;
+      path = findTerrainPath(heightmap, sp1, sp2, {
+        ...ropts,
+        maxGrade: 1e6, // legality is effectively unconstrained: never give up on connectivity...
+        costNormGrade: ropts.maxGrade, // ...but cost is still judged against what the user actually asked for, so the road still visibly prefers gentler ground instead of degenerating into a straight line
+        slopeCostWeight: ropts.slopeCostWeight*1.6,
+        marginFactor: ropts.marginFactor*3,
+        roadMinH: 0, roadMaxH: 1, roadElevTolerance: 0 // elevation band fully unconstrained too: never let it be the reason a road gives up
+      });
+    }
+    if(path && path.length>=2){
+      const tolerance = Math.max(0.5, (W/heightmap.cols)*0.12);
+      const simplified = douglasPeucker(path, tolerance);
+      let rounded = chaikinOpen(simplified, 3);
+      if(hasLeadIn) rounded = [p1, ...rounded];
+      if(hasLeadOut) rounded = [...rounded, p2];
+      return { points: rounded, viaTerrain:true, tier };
+    }
+    // Every tier failed, including the one that barely constrains anything. The old
+    // answer here was a plain curve, which with curviness at 0 is a dead-straight
+    // line ruled across the landscape -- unmistakable, and worse than no road at
+    // all. So: no road. The caller drops the edge and counts it. This is the only
+    // thing that changes about how roads are built; each tier still searches
+    // exactly as it did.
+    return null;
+  }
+  return { points: curvedPoints(rng, p1, p2, curviness), viaTerrain:false };
+}
+
+// ---------- Web Worker pool for parallel terrain-road pathfinding ----------
+// The A* search for each road edge only depends on the (read-only, shared)
+// heightmap -- edges never depend on each other's paths -- so this is
+// embarrassingly parallel. The worker script below is a deliberate DUPLICATE of
+// the pure pathfinding functions above (dist, Heightmap, MinHeap, TERRAIN_DIRS,
+// findTerrainPath, douglasPeucker, chaikinOpen, curvedPoints, terrainPathOrFallback):
+// a Worker runs in a separate global scope with no access to this file's
+// functions, and it's created from an in-memory Blob so the whole app stays one
+// self-contained HTML file (no separate .js file, no server). If you change the
+// pathfinding logic above, mirror the change here too.
+const WORKER_SOURCE = `
+const W = ${W}, H = ${H};
+${dist.toString()}
+${Heightmap.toString()}
+${mulberry32.toString()}
+${MinHeap.toString()}
+${gcd.toString()}
+const TERRAIN_DIRS = (${(() => {
+  const dirs = [];
+  const R = 6;
+  for(let dx=-R; dx<=R; dx++){
+    for(let dy=-R; dy<=R; dy++){
+      if(dx===0 && dy===0) continue;
+      if(gcd(Math.abs(dx),Math.abs(dy)) !== 1) continue;
+      dirs.push([dx,dy,Math.hypot(dx,dy)]);
+    }
+  }
+  return dirs;
+}).toString()})();
+${findTerrainPath.toString()}
+${douglasPeucker.toString()}
+${curvedPoints.toString()}
+${chaikinOpen.toString()}
+${terrainPathOrFallback.toString()}
+
+let heightmap = null;
+
+self.onmessage = function(e){
+  const msg = e.data;
+  if(msg.type === 'heightmap'){
+    heightmap = new Heightmap(msg.cols, msg.rows, msg.data);
+    return;
+  }
+  if(msg.type === 'task'){
+    const rng = mulberry32(msg.seed);
+    const result = terrainPathOrFallback(rng, msg.p1, msg.p2, msg.curviness, heightmap, msg.ropts);
+    self.postMessage({ type:'result', id: msg.id, points: result ? result.points : null,
+                       viaTerrain: result ? result.viaTerrain : false, tier: result ? result.tier : 0, impossible: !result });
+  }
+};
+`;
+
+class TerrainWorkerPool{
+  constructor(size){
+    this.size = size;
+    this.workers = [];
+    this.idle = [];
+    this.queue = [];
+    this.callbacks = new Map();
+    this.workerTask = new Map(); // worker -> in-flight task, for error recovery
+    this.nextId = 0;
+    this.heightmapKey = null;
+    this.heightmapData = null; // kept so a replacement worker can be re-seeded without reaching outside
+    const blob = new Blob([WORKER_SOURCE], {type:'application/javascript'});
+    this.blobUrl = URL.createObjectURL(blob);
+    for(let i=0;i<size;i++){
+      const w = new Worker(this.blobUrl);
+      w.onmessage = (e) => this._onMessage(w, e);
+      w.onerror = (e) => this._onError(w, e);
+      this.workers.push(w);
+      this.idle.push(w);
+    }
+  }
+  // (re)broadcasts the heightmap to every worker; cheap to call every regenerate,
+  // it only actually posts data when the heightmap identity changed.
+  setHeightmap(heightmap){
+    const key = heightmap ? (heightmap.cols+'x'+heightmap.rows+'#'+heightmap.data[0]+','+heightmap.data[heightmap.data.length-1]) : null;
+    if(key === this.heightmapKey) return;
+    this.heightmapKey = key;
+    if(!heightmap){ this.heightmapData = null; return; }
+    this.heightmapData = {type:'heightmap', cols:heightmap.cols, rows:heightmap.rows, data:heightmap.data};
+    this.workers.forEach(w => w.postMessage(this.heightmapData));
+  }
+  runTask(task){
+    return new Promise((resolve) => {
+      const id = this.nextId++;
+      this.callbacks.set(id, resolve);
+      this.queue.push({id, type:'task', ...task});
+      this._dispatch();
+    });
+  }
+  _dispatch(){
+    while(this.idle.length && this.queue.length){
+      const w = this.idle.pop();
+      const task = this.queue.shift();
+      this.workerTask.set(w, task);
+      w.postMessage(task);
+    }
+  }
+  _onMessage(w, e){
+    if(e.data.type==='result'){
+      const cb = this.callbacks.get(e.data.id);
+      this.callbacks.delete(e.data.id);
+      this.workerTask.delete(w);
+      this.idle.push(w);
+      this._dispatch();
+      if(cb) cb({points:e.data.points, viaTerrain:e.data.viaTerrain});
+    }
+  }
+  _onError(w, e){
+    console.error('terrain worker error, falling back to a straight road for its task:', e.message||e);
+    const task = this.workerTask.get(w);
+    this.workerTask.delete(w);
+    // this worker may be wedged; drop it and spin up a fresh replacement so the pool stays at full size
+    this.workers = this.workers.filter(x=>x!==w);
+    this.idle = this.idle.filter(x=>x!==w);
+    try{
+      const replacement = new Worker(this.blobUrl);
+      replacement.onmessage = (ev) => this._onMessage(replacement, ev);
+      replacement.onerror = (ev) => this._onError(replacement, ev);
+      if(this.heightmapData) replacement.postMessage(this.heightmapData);
+      this.workers.push(replacement);
+      this.idle.push(replacement);
+    }catch(err){ /* pool just runs one worker short from here on */ }
+    if(task){
+      const cb = this.callbacks.get(task.id);
+      this.callbacks.delete(task.id);
+      if(cb) cb({ points: curvedPoints(mulberry32(task.seed), task.p1, task.p2, task.curviness), viaTerrain:false });
+    }
+    this._dispatch();
+  }
+  terminate(){
+    this.workers.forEach(w=>w.terminate());
+    URL.revokeObjectURL(this.blobUrl);
+  }
+}
+
+function curvedPoints(rng, p1, p2, curviness){
+  const length = dist(p1,p2);
+  const depth = Math.min(5, Math.max(2, Math.round(length/45)));
+  let amp = curviness * length * 0.42;
+  function subdivide(a,b,d,amp){
+    if(d<=0) return [a,b];
+    const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+    const dx=b[0]-a[0], dy=b[1]-a[1];
+    const len = Math.hypot(dx,dy)||1;
+    const nx=-dy/len, ny=dx/len;
+    const offset = (rng()-0.5)*2*amp;
+    const mid=[mx+nx*offset, my+ny*offset];
+    const left = subdivide(a,mid,d-1,amp*0.6);
+    const right = subdivide(mid,b,d-1,amp*0.6);
+    return [...left.slice(0,-1), ...right];
+  }
+  return subdivide(p1,p2,depth,amp);
+}
+
+function smoothPath(pts){
+  if(pts.length<3) return `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)} L${pts[1][0].toFixed(1)},${pts[1][1].toFixed(1)}`;
+  let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+  for(let i=1;i<pts.length-1;i++){
+    const xc=(pts[i][0]+pts[i+1][0])/2, yc=(pts[i][1]+pts[i+1][1])/2;
+    d += ` Q${pts[i][0].toFixed(1)},${pts[i][1].toFixed(1)} ${xc.toFixed(1)},${yc.toFixed(1)}`;
+  }
+  const last = pts[pts.length-1];
+  d += ` L${last[0].toFixed(1)},${last[1].toFixed(1)}`;
+  return d;
+}
+
+// Plain polyline through points -- used for terrain-derived roads instead of
+// smoothPath(), because bezier-through-midpoints can loop/overshoot on the sharp
+// hairpin turns a real switchback needs. The points are already Chaikin-rounded,
+// so straight segments between them already read as smooth curves.
+function straightPath(pts){
+  return 'M' + pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L');
+}
+
+function roadPathD(e){
+  return e.viaTerrain ? straightPath(e.points) : smoothPath(e.points);
+}
+
+// ---------- Chaikin corner-cutting (closed polygon smoothing) ----------
+function chaikinClosed(points, iterations){
+  let pts = points;
+  for(let it=0; it<iterations; it++){
+    const next = [];
+    for(let i=0;i<pts.length;i++){
+      const p0 = pts[i], p1 = pts[(i+1)%pts.length];
+      next.push([p0[0]*0.75+p1[0]*0.25, p0[1]*0.75+p1[1]*0.25]);
+      next.push([p0[0]*0.25+p1[0]*0.75, p0[1]*0.25+p1[1]*0.75]);
+    }
+    pts = next;
+  }
+  return pts;
+}
+
+// Open-path Chaikin: rounds interior corners without ever looping/overshooting on
+// sharp turns (unlike bezier-through-midpoints), and keeps the exact start/end points.
+function chaikinOpen(points, iterations){
+  if(points.length<3) return points.map(p=>p.slice());
+  let pts = points;
+  for(let it=0; it<iterations; it++){
+    const next = [pts[0].slice()];
+    for(let i=0;i<pts.length-1;i++){
+      const p0=pts[i], p1=pts[i+1];
+      next.push([p0[0]*0.75+p1[0]*0.25, p0[1]*0.75+p1[1]*0.25]);
+      next.push([p0[0]*0.25+p1[0]*0.75, p0[1]*0.25+p1[1]*0.75]);
+    }
+    next.push(pts[pts.length-1].slice());
+    pts = next;
+  }
+  return pts;
+}
+
+function polygonAreaAbs(pts){
+  let a = 0;
+  for(let i=0;i<pts.length;i++){
+    const [x1,y1]=pts[i], [x2,y2]=pts[(i+1)%pts.length];
+    a += x1*y2 - x2*y1;
+  }
+  return Math.abs(a)/2;
+}
+
+// ---------- road post-processing: intersections -> junctions, parallel-road pruning ----------
+function segIntersect(p1,p2,p3,p4){
+  const d1x=p2[0]-p1[0], d1y=p2[1]-p1[1];
+  const d2x=p4[0]-p3[0], d2y=p4[1]-p3[1];
+  const denom = d1x*d2y - d1y*d2x;
+  if(Math.abs(denom) < 1e-9) return null;
+  const ex=p3[0]-p1[0], ey=p3[1]-p1[1];
+  const t = (ex*d2y - ey*d2x)/denom;
+  const u = (ex*d1y - ey*d1x)/denom;
+  if(t<=0.02 || t>=0.98 || u<=0.02 || u>=0.98) return null; // skip near-endpoint touches (real shared nodes)
+  return { x:p1[0]+t*d1x, y:p1[1]+t*d1y, t, u };
+}
+
+// Finds real geometric crossings between road curves that don't already share a
+// node, and splits both roads there into a shared junction node. Runs regardless
+// of which layer a road belongs to -- by this point layers no longer matter.
+function resolveIntersections(nodes, edges, snapDist){
+  const segments = [];
+  edges.forEach((e, ei) => {
+    for(let s=0; s<e.points.length-1; s++) segments.push({ei, si:s, p1:e.points[s], p2:e.points[s+1]});
+  });
+  if(segments.length===0) return {nodes, edges, junctionsAdded:0};
+
+  const cellSize = 26;
+  const grid = new Map();
+  function cellsFor(p1,p2){
+    const minX=Math.min(p1[0],p2[0]), maxX=Math.max(p1[0],p2[0]);
+    const minY=Math.min(p1[1],p2[1]), maxY=Math.max(p1[1],p2[1]);
+    const gx0=Math.floor(minX/cellSize), gx1=Math.floor(maxX/cellSize);
+    const gy0=Math.floor(minY/cellSize), gy1=Math.floor(maxY/cellSize);
+    const cells=[];
+    for(let gx=gx0; gx<=gx1; gx++) for(let gy=gy0; gy<=gy1; gy++) cells.push(gx+'_'+gy);
+    return cells;
+  }
+  segments.forEach((seg, idx) => {
+    cellsFor(seg.p1,seg.p2).forEach(k=>{
+      if(!grid.has(k)) grid.set(k, []);
+      grid.get(k).push(idx);
+    });
+  });
+
+  const crossings = [];
+  const tested = new Set();
+  grid.forEach(idxList=>{
+    for(let a=0; a<idxList.length; a++){
+      for(let b=a+1; b<idxList.length; b++){
+        const ia=idxList[a], ib=idxList[b];
+        const segA=segments[ia], segB=segments[ib];
+        if(segA.ei === segB.ei) continue;
+        const pairKey = ia<ib ? ia+'_'+ib : ib+'_'+ia;
+        if(tested.has(pairKey)) continue;
+        tested.add(pairKey);
+        const hit = segIntersect(segA.p1, segA.p2, segB.p1, segB.p2);
+        if(hit) crossings.push({ x:hit.x, y:hit.y, edgeA:segA.ei, edgeB:segB.ei, segA:segA.si, segB:segB.si, tA:hit.t, tB:hit.u });
+      }
+    }
+  });
+  if(crossings.length===0) return {nodes, edges, junctionsAdded:0};
+
+  // merge crossings that land close together into one shared junction
+  const junctionPoints = [];
+  function findOrCreateJunction(x,y){
+    for(let i=0;i<junctionPoints.length;i++){
+      if(Math.hypot(junctionPoints[i][0]-x, junctionPoints[i][1]-y) < snapDist) return i;
+    }
+    junctionPoints.push([x,y]);
+    return junctionPoints.length-1;
+  }
+  crossings.forEach(c => { c.junctionIdx = findOrCreateJunction(c.x, c.y); });
+
+  const perEdgeSplits = new Map();
+  crossings.forEach(c=>{
+    if(!perEdgeSplits.has(c.edgeA)) perEdgeSplits.set(c.edgeA, []);
+    perEdgeSplits.get(c.edgeA).push({segIdx:c.segA, t:c.tA, junctionIdx:c.junctionIdx});
+    if(!perEdgeSplits.has(c.edgeB)) perEdgeSplits.set(c.edgeB, []);
+    perEdgeSplits.get(c.edgeB).push({segIdx:c.segB, t:c.tB, junctionIdx:c.junctionIdx});
+  });
+
+  const newNodes = nodes.slice();
+  const junctionNodeIds = junctionPoints.map((p,i)=>{
+    const id = 'j'+newNodes.length+'_'+i;
+    newNodes.push({id, x:p[0], y:p[1], layer:'junction', degree:0});
+    return id;
+  });
+
+  const newEdges = [];
+  edges.forEach((e, ei) => {
+    const splits = perEdgeSplits.get(ei);
+    if(!splits || splits.length===0){ newEdges.push(e); return; }
+    splits.sort((a,b)=> (a.segIdx + a.t) - (b.segIdx + b.t));
+    let curPoints = [e.points[0]];
+    let curFromId = e.from;
+    let segCursor = 0;
+    for(const sp of splits){
+      while(segCursor < sp.segIdx){ curPoints.push(e.points[segCursor+1]); segCursor++; }
+      const jPt = junctionPoints[sp.junctionIdx];
+      curPoints.push([jPt[0], jPt[1]]);
+      const jId = junctionNodeIds[sp.junctionIdx];
+      if(curFromId !== jId) newEdges.push({ from:curFromId, to:jId, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain, points:curPoints });
+      curFromId = jId;
+      curPoints = [[jPt[0], jPt[1]]];
+    }
+    while(segCursor < e.points.length-1){ curPoints.push(e.points[segCursor+1]); segCursor++; }
+    if(curFromId !== e.to) newEdges.push({ from:curFromId, to:e.to, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain, points:curPoints });
+  });
+
+  return {nodes:newNodes, edges:newEdges, junctionsAdded:junctionPoints.length};
+}
+
+// Higher wins. Layer1 > layer2 > layer3; within the same layer, backbone roads
+// slightly outrank loop roads. When two edges' priority ties exactly, the earlier
+// one in the edges array wins (arbitrary but stable, avoids both being kept).
+function roadPriority(e){
+  const kindRank = {layer1:3, layer2:2, layer3:1}[e.kind] || 0;
+  return kindRank*10 + (e.role==='backbone' ? 1 : 0);
+}
+
+function sampleEdgeWithArc(pts, sampleStep){
+  const out = [{x:pts[0][0], y:pts[0][1], arc:0}];
+  let acc = 0;
+  for(let i=0;i<pts.length-1;i++){
+    const [x1,y1]=pts[i], [x2,y2]=pts[i+1];
+    const segLen = Math.hypot(x2-x1,y2-y1);
+    if(segLen<1e-6) continue;
+    const steps = Math.max(1, Math.ceil(segLen/sampleStep));
+    for(let s=1;s<=steps;s++){
+      const t=s/steps;
+      acc += segLen/steps;
+      out.push({x:x1+(x2-x1)*t, y:y1+(y2-y1)*t, arc:acc});
+    }
+  }
+  return out;
+}
+
+// Splits an edge into sub-edges at a set of {sampleIdx, junctionId} attachment
+// points along its own sample array -- used to give a "dominant" road a REAL
+// graph vertex wherever a lower-priority road merges onto it, instead of the
+// junction sitting there only visually. Mirrors resolveIntersections' proven
+// per-edge-splits reconstruction.
+function splitEdgeAtAttachments(e, samples, attachments){
+  if(attachments.length===0) return [e];
+  attachments.sort((a,b)=>a.sampleIdx-b.sampleIdx);
+  const result = [];
+  let curFromId = e.from;
+  let curPoints = [[samples[0].x, samples[0].y]];
+  let idx = 0;
+  for(const att of attachments){
+    while(idx < att.sampleIdx){ idx++; curPoints.push([samples[idx].x, samples[idx].y]); }
+    if(curFromId !== att.junctionId && curPoints.length>=2){
+      const splicePt = att.pt || [samples[idx].x, samples[idx].y];
+      curPoints[curPoints.length-1] = splicePt;
+      result.push({ from:curFromId, to:att.junctionId, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain, points:curPoints });
+      curFromId = att.junctionId;
+      curPoints = [splicePt];
+    }
+  }
+  while(idx < samples.length-1){ idx++; curPoints.push([samples[idx].x, samples[idx].y]); }
+  if(curFromId !== e.to && curPoints.length>=2){
+    result.push({ from:curFromId, to:e.to, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain, points:curPoints });
+  }
+  return result;
+}
+
+// Finds the ACTUAL overlapping stretches between roads (not whole-edge judgments):
+// walks each edge's own sample points and, per point, checks whether a
+// higher-priority (or equal-priority-but-earlier) road runs within `threshold` of
+// it right there. Contiguous runs of "shadowed" points of at least `minRunLength`
+// get cut out of the lower-priority road; the cut ends connect into a REAL junction
+// vertex spliced into the dominant road (not just a visually-close point), so two
+// roads that only share a mountain pass for part of their length keep their own
+// distinct stretches before and after it, merging only where they actually coincide,
+// with connectivity guaranteed by construction.
+// frozenEdges: from earlier layers, already finalized -- these can receive a
+// splice point (split into two, if a newer layer's road merges onto them) but are
+// NEVER trimmed or removed themselves. layerNewEdges: this layer's own raw roads,
+// fully eligible for trimming against anything (frozen or from this same layer).
+function mergeParallelCorridors(nodes, frozenEdges, layerNewEdges, opts){
+  const { threshold, minRunLength, sampleStep, snapDist } = opts;
+  const edges = frozenEdges.concat(layerNewEdges);
+  const frozenCount = frozenEdges.length;
+  if(edges.length===0) return { nodes, edges, fullyMergedCount:0, splitCount:0 };
+
+  const edgeSamples = edges.map(e => sampleEdgeWithArc(e.points, sampleStep));
+  const priorities = edges.map(roadPriority);
+
+  const cellSize = Math.max(threshold, 10);
+  const grid = new Map();
+  function insert(x,y,ei,si){
+    const k = Math.floor(x/cellSize)+'_'+Math.floor(y/cellSize);
+    if(!grid.has(k)) grid.set(k, []);
+    grid.get(k).push({x,y,ei,si});
+  }
+  edgeSamples.forEach((samples, ei) => samples.forEach((p,si)=>insert(p.x,p.y,ei,si)));
+
+  function findBestShadow(x,y,r,selfEi){
+    const selfPriority = priorities[selfEi];
+    const span = Math.max(1, Math.ceil(r/cellSize));
+    const cx=Math.floor(x/cellSize), cy=Math.floor(y/cellSize);
+    let best = null, bestDist = r;
+    for(let dx=-span; dx<=span; dx++){
+      for(let dy=-span; dy<=span; dy++){
+        const arr = grid.get((cx+dx)+'_'+(cy+dy));
+        if(!arr) continue;
+        for(const p of arr){
+          if(p.ei===selfEi) continue;
+          const op = priorities[p.ei];
+          if(op < selfPriority) continue;
+          if(op === selfPriority && p.ei > selfEi) continue; // tie-break: lower index wins
+          const d = Math.hypot(p.x-x, p.y-y);
+          if(d < bestDist){ bestDist = d; best = p; }
+        }
+      }
+    }
+    return best;
+  }
+
+  const junctionPoints = [];
+  const junctionNodeIds = [];
+  const newNodes = nodes.slice();
+  function junctionFor(x,y){
+    for(let i=0;i<junctionPoints.length;i++){
+      if(Math.hypot(junctionPoints[i][0]-x, junctionPoints[i][1]-y) < snapDist){
+        return { id: junctionNodeIds[i], pt: junctionPoints[i] };
+      }
+    }
+    const id = 'm'+newNodes.length+'_'+junctionPoints.length;
+    newNodes.push({id, x, y, layer:'junction', degree:0});
+    junctionPoints.push([x,y]);
+    junctionNodeIds.push(id);
+    return { id, pt: [x,y] };
+  }
+
+  // ---- pass 1: figure out what happens to every edge, WITHOUT finalizing geometry
+  // yet -- an edge can simultaneously be trimmed (shadowed by something above it)
+  // AND be a splice target for something below it, and we need both effects before
+  // building anything. Frozen edges (index < frozenCount) are SKIPPED here: they
+  // are never trimmed, only ever used as shadow references and splice targets.
+  const attachmentsByEdge = edges.map(()=>[]);           // dominant-edge idx -> [{sampleIdx, junctionId}]
+  const plan = new Array(edges.length).fill(null);       // per-edge: {type:'stub', ...} or {type:'keep', keepRanges}
+  let fullyMergedCount = 0, splitCount = 0;
+
+  edges.forEach((e, ei) => {
+    if(ei < frozenCount) return; // frozen: never a trim candidate
+
+    const samples = edgeSamples[ei];
+    const shadow = samples.map(p => findBestShadow(p.x, p.y, threshold, ei));
+
+    // never let a road get trimmed right up against its OWN destination node --
+    // otherwise, at a real crossroads, every road that converges there naturally
+    // brushes close to the others right near the end, and would get clipped just
+    // short of where it should visibly arrive. Protecting a small guard zone at
+    // each true endpoint keeps roads visibly reaching the junctions they belong to.
+    const totalLenGuard = samples[samples.length-1].arc || 1;
+    // scales with threshold/sampleStep (both now real-world-meter-derived) instead
+    // of a flat canvas-unit constant -- a fixed floor here used to be calibrated
+    // for the old, much coarser default threshold, and at fine real-world scales
+    // (e.g. threshold=25m) it could swallow a short edge's overlap detection
+    // whole, silently preventing any merge from ever triggering near it.
+    const endpointGuard = Math.max(threshold*2, sampleStep*2);
+    for(let i=0;i<samples.length;i++){
+      if(samples[i].arc < endpointGuard || (totalLenGuard - samples[i].arc) < endpointGuard) shadow[i] = null;
+    }
+
+    const runs = [];
+    let runStart = null;
+    for(let i=0;i<shadow.length;i++){
+      if(shadow[i] && runStart===null) runStart = i;
+      if(!shadow[i] && runStart!==null){ runs.push([runStart, i-1]); runStart=null; }
+    }
+    if(runStart!==null) runs.push([runStart, shadow.length-1]);
+
+    // close small gaps BETWEEN RAW RUNS FIRST, before any length filtering. A path
+    // pulled by road-attraction but not forced to literally coincide with the
+    // existing road can weave in and out of `threshold` a few times -- crossing it
+    // repeatedly instead of running alongside it -- which fragments what should be
+    // one long overlap into several brief shadow runs, each individually shorter
+    // than minRunLength. Filtering by minRunLength BEFORE closing gaps (the old
+    // order) threw every one of those fragments away with nothing left to bridge,
+    // so a genuinely-overlapping-but-weaving stretch never merged at all and each
+    // crossing instead became its own separate junction node further down the
+    // pipeline (resolveIntersections) -- a necklace of unmerged dots along what
+    // should have been a single shared road. Bridging gaps first lets those
+    // fragments combine into one run that can then clear the length threshold.
+    const minGapLen = Math.max(threshold*3, minRunLength*0.5);
+    const closedRuns = [];
+    for(const run of runs){
+      if(closedRuns.length>0){
+        const last = closedRuns[closedRuns.length-1];
+        const gapLen = samples[run[0]].arc - samples[last[1]].arc;
+        if(gapLen < minGapLen){ last[1] = run[1]; continue; }
+      }
+      closedRuns.push([run[0], run[1]]);
+    }
+    let sigRuns = closedRuns.filter(([a,b]) => (samples[b].arc - samples[a].arc) >= minRunLength);
+
+    if(sigRuns.length===0) return; // untouched, handled in pass 2 by attachmentsByEdge alone
+
+    const totalLen = samples[samples.length-1].arc || 1;
+    const shadowedLen = sigRuns.reduce((s,[a,b])=>s+(samples[b].arc-samples[a].arc), 0);
+
+    if(shadowedLen >= totalLen*0.9){
+      fullyMergedCount++;
+      // A "loop" edge only ever exists as OPTIONAL extra connectivity between two
+      // nodes that are already reachable another way (unlike a "backbone" edge,
+      // which can be the only path to somewhere) -- so when road-attraction has
+      // pulled a loop edge until it runs virtually on top of a higher-priority
+      // road for its whole length, keeping it around as two tiny stub connectors
+      // (one splice at each end, onto the dominant road) adds no real route,
+      // only a pointless extra pair of junctions right next to each other on
+      // what should read as a single clean road. Dropping it outright removes
+      // that clutter; ensureConnectivity() further down still restores it (or
+      // an equivalent) from the original, pre-merge edges in the rare case it
+      // actually WAS needed for reachability.
+      if(e.role === 'loop'){
+        plan[ei] = { type:'drop' };
+        return;
+      }
+      const shFirst = shadow[0], shLast = shadow[shadow.length-1];
+      const stub = { type:'stub', shFirst:null, shLast:null };
+      if(shFirst){
+        const { id:j, pt } = junctionFor(shFirst.x, shFirst.y);
+        attachmentsByEdge[shFirst.ei].push({sampleIdx: shFirst.si, junctionId:j, pt});
+        stub.shFirst = { j, pt };
+      }
+      if(shLast){
+        const { id:j, pt } = junctionFor(shLast.x, shLast.y);
+        attachmentsByEdge[shLast.ei].push({sampleIdx: shLast.si, junctionId:j, pt});
+        stub.shLast = { j, pt };
+      }
+      plan[ei] = stub;
+      return;
+    }
+
+    splitCount++;
+    let cursor = 0;
+    const keepRanges = [];
+    for(const [a,b] of sigRuns){
+      if(a > cursor) keepRanges.push([cursor, a-1]);
+      cursor = b+1;
+    }
+    if(cursor <= samples.length-1) keepRanges.push([cursor, samples.length-1]);
+
+    const rangesInfo = [];
+    keepRanges.forEach(([p,q])=>{
+      if(q-p < 1) return; // sliver too short to matter
+      let fromId=null, toId=null, fromPt=null, toPt=null;
+      if(p>0){
+        const sh = shadow[p-1];
+        const r = junctionFor(sh.x, sh.y);
+        fromId = r.id; fromPt = r.pt;
+        attachmentsByEdge[sh.ei].push({sampleIdx: sh.si, junctionId:fromId, pt:r.pt});
+      }
+      if(q<samples.length-1){
+        const sh = shadow[q+1];
+        const r = junctionFor(sh.x, sh.y);
+        toId = r.id; toPt = r.pt;
+        attachmentsByEdge[sh.ei].push({sampleIdx: sh.si, junctionId:toId, pt:r.pt});
+      }
+      rangesInfo.push({p,q,fromId,toId,fromPt,toPt});
+    });
+    plan[ei] = { type:'keep', ranges: rangesInfo };
+  });
+
+  // ---- pass 2: build final geometry now that every edge's incoming attachments are known
+  const rebuiltEdges = [];
+  edges.forEach((e, ei) => {
+    const samples = edgeSamples[ei];
+    const atts = attachmentsByEdge[ei];
+    const p = plan[ei];
+
+    if(p===null){
+      // untouched by shadowing (true for every frozen edge, and any new edge with
+      // no significant overlap); may still be a splice target for others
+      if(atts.length===0) rebuiltEdges.push(e);
+      else rebuiltEdges.push(...splitEdgeAtAttachments(e, samples, atts));
+      return;
+    }
+
+    if(p.type==='drop') return; // fully-redundant loop edge, discarded outright (see pass 1)
+
+    if(p.type==='stub'){
+      if(p.shFirst && p.shFirst.j !== e.from){
+        rebuiltEdges.push({ from:e.from, to:p.shFirst.j, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain, points:[[samples[0].x,samples[0].y], p.shFirst.pt] });
+      }
+      if(p.shLast && p.shLast.j !== e.to){
+        rebuiltEdges.push({ from:p.shLast.j, to:e.to, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain, points:[p.shLast.pt, [samples[samples.length-1].x,samples[samples.length-1].y]] });
+      }
+      return;
+    }
+
+    // type==='keep': rebuild each kept range, additionally splicing in any
+    // attachments from OTHER edges that landed within this specific range
+    p.ranges.forEach(({p:rp, q:rq, fromId, toId, fromPt, toPt})=>{
+      const rangePts = samples.slice(rp, rq+1).map(s=>({x:s.x, y:s.y}));
+      if(fromPt) rangePts.unshift({x:fromPt[0], y:fromPt[1]});
+      if(toPt) rangePts.push({x:toPt[0], y:toPt[1]});
+      const idxShift = fromPt ? 1 : 0;
+      const localAtts = atts
+        .filter(a => a.sampleIdx >= rp && a.sampleIdx <= rq)
+        .map(a => ({ sampleIdx: (a.sampleIdx - rp) + idxShift, junctionId: a.junctionId, pt: a.pt }));
+      const segFrom = fromId===null ? e.from : fromId;
+      const segTo = toId===null ? e.to : toId;
+      const pseudoEdge = { from:segFrom, to:segTo, kind:e.kind, role:e.role, viaTerrain:e.viaTerrain };
+      if(localAtts.length===0){
+        rebuiltEdges.push({ ...pseudoEdge, points: rangePts.map(s=>[s.x,s.y]) });
+      } else {
+        rebuiltEdges.push(...splitEdgeAtAttachments(pseudoEdge, rangePts, localAtts));
+      }
+    });
+  });
+
+  return { nodes:newNodes, edges:rebuiltEdges, fullyMergedCount, splitCount };
+}
+
+function polylineLength(pts){
+  let len=0;
+  for(let i=1;i<pts.length;i++) len += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]);
+  return len;
+}
+
+// Safety net: restores connectivity for any node the merge pass above might have
+// stranded, using the smallest set of ORIGINAL (pre-merge) edges needed,
+// Kruskal-style. The merge is designed to never disconnect anything by properly
+// splicing junctions into the dominant road, but this guarantees it regardless.
+function ensureConnectivity(originalEdges, mergedNodes, mergedEdges){
+  const parent = new Map();
+  mergedNodes.forEach(n=>parent.set(n.id, n.id));
+  function find(x){ while(parent.get(x)!==x){ parent.set(x, parent.get(parent.get(x))); x=parent.get(x); } return x; }
+  function union(a,b){ const ra=find(a), rb=find(b); if(ra!==rb){ parent.set(ra,rb); return true; } return false; }
+
+  mergedEdges.forEach(e=>{ if(parent.has(e.from) && parent.has(e.to)) union(e.from,e.to); });
+
+  const settlementIds = mergedNodes.filter(n=>n.layer===1||n.layer===2||n.layer===3).map(n=>n.id);
+  if(settlementIds.length===0) return mergedEdges;
+  const rootCounts = new Map();
+  settlementIds.forEach(id=>{ const r=find(id); rootCounts.set(r, (rootCounts.get(r)||0)+1); });
+  let mainRoot=null, mainCount=-1;
+  rootCounts.forEach((cnt,r)=>{ if(cnt>mainCount){ mainCount=cnt; mainRoot=r; } });
+
+  if(settlementIds.every(id=>find(id)===mainRoot)) return mergedEdges;
+
+  const extra = [];
+  const sortedOriginal = originalEdges.slice().sort((a,b)=>polylineLength(a.points)-polylineLength(b.points));
+  for(const e of sortedOriginal){
+    if(!parent.has(e.from) || !parent.has(e.to)) continue;
+    if(find(e.from)!==find(e.to)){
+      union(e.from, e.to);
+      extra.push(e);
+    }
+  }
+  return mergedEdges.concat(extra);
+}
+
+// mergeParallelCorridors and resolveIntersections each only ever snap a NEW point
+// to an ALREADY-REGISTERED junction -- they never re-examine junctions created
+// earlier for consolidation among themselves. With enough nearby roads (e.g. a
+// dense, tightly-spaced layer), that can leave a tiny cluster of separate junction
+// nodes a few meters apart that visually reads as "not merged" even with the
+// snap distance turned up, because no single pairwise check in either pass ever
+// compared two of them directly. This pass runs once more at the end, over the
+// WHOLE junction set, and does real (transitive) single-linkage clustering: if
+// A is close to B and B is close to C, A/B/C all end up as one point even if A
+// and C themselves are farther apart than snapDist -- exactly the "whole cluster
+// collapses" behavior turning the snap-distance slider up is expected to produce.
+// Only junction nodes that belong EXCLUSIVELY to edges from the CURRENT layer's
+// own kind are eligible: a junction touched by any earlier (frozen) layer's edge
+// is a real splice point ON that frozen edge's exact, immutable geometry, and
+// moving it would silently reshape a road that's supposed to be locked in place.
+function declutterJunctions(nodes, edges, currentKind, snapDist, maxDegree){
+  if(snapDist<=0) return { nodes, edges };
+  maxDegree = maxDegree || Infinity;
+  const protectedIds = new Set();
+  edges.forEach(e=>{ if(e.kind !== currentKind){ protectedIds.add(e.from); protectedIds.add(e.to); } });
+
+  const junctionIdx = new Map(); // id -> index into `candidates`
+  const candidates = [];
+  nodes.forEach(n=>{
+    if(n.layer==='junction' && !protectedIds.has(n.id)){
+      junctionIdx.set(n.id, candidates.length);
+      candidates.push(n);
+    }
+  });
+  if(candidates.length<2) return { nodes, edges };
+
+  // Real degree of each candidate junction right now, counted from the edges that
+  // actually touch it -- never the stale nodes[].degree field, which is only ever
+  // set once during initial backbone/loop construction and never updated by any
+  // later splice/merge/resolve step, so it doesn't reflect the current graph.
+  const degreeOf = new Map();
+  edges.forEach(e=>{
+    degreeOf.set(e.from, (degreeOf.get(e.from)||0)+1);
+    degreeOf.set(e.to, (degreeOf.get(e.to)||0)+1);
+  });
+
+  const parent = candidates.map((_,i)=>i);
+  const groupDegree = candidates.map(n=>degreeOf.get(n.id)||0);
+  function find(i){ while(parent[i]!==i){ parent[i]=parent[parent[i]]; i=parent[i]; } return i; }
+
+  // Collect every candidate pair within snapDist, closest first, and merge
+  // greedily -- but ONLY when doing so wouldn't push the resulting cluster's
+  // total road count past maxDegree (a shared connector edge between two
+  // members of the same group vanishes as a self-loop after merging, so this
+  // slightly over-counts rather than under-counts -- the safe direction). A
+  // pair that's close but would overload the junction is simply left as two
+  // separate, nearby junctions instead of being forced together, which is what
+  // was producing 5+-way intersections: unconditional transitive clustering
+  // doesn't care how many roads land on the result, only how close the source
+  // points are. Closest-first ordering means the tightest, most obviously-one-
+  // junction clusters win the limited "degree budget" before farther, more
+  // marginal ones compete for it.
+  const grid = new SpatialGrid(Math.max(snapDist,1));
+  candidates.forEach((n,i)=>grid.insert([n.x,n.y,i]));
+  const pairs = [];
+  for(let i=0;i<candidates.length;i++){
+    const a = candidates[i];
+    const cx=Math.floor(a.x/grid.cellSize), cy=Math.floor(a.y/grid.cellSize);
+    for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+      const arr = grid.cells.get((cx+dx)+'_'+(cy+dy));
+      if(!arr) continue;
+      for(const p of arr){
+        const j = p[2];
+        if(j<=i) continue;
+        const d = Math.hypot(a.x-p[0], a.y-p[1]);
+        if(d < snapDist) pairs.push([d,i,j]);
+      }
+    }
+  }
+  pairs.sort((p1,p2)=>p1[0]-p2[0]);
+  for(const [,i,j] of pairs){
+    const ri = find(i), rj = find(j);
+    if(ri===rj) continue;
+    if(groupDegree[ri] + groupDegree[rj] > maxDegree) continue;
+    parent[ri] = rj;
+    groupDegree[rj] += groupDegree[ri];
+  }
+
+  const groups = new Map(); // root -> [indices]
+  for(let i=0;i<candidates.length;i++){
+    const r = find(i);
+    if(!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(i);
+  }
+
+  const remap = new Map(); // old node id -> {id, x, y}
+  const dropIds = new Set();
+  groups.forEach(idxs=>{
+    if(idxs.length<2) return;
+    const members = idxs.map(i=>candidates[i]);
+    const cx = members.reduce((s,n)=>s+n.x,0)/members.length;
+    const cy = members.reduce((s,n)=>s+n.y,0)/members.length;
+    const rep = members[0];
+    members.forEach(m=>{ remap.set(m.id, {id:rep.id, x:cx, y:cy}); if(m.id!==rep.id) dropIds.add(m.id); });
+  });
+  if(remap.size===0) return { nodes, edges };
+
+  const newNodes = nodes.filter(n=>!dropIds.has(n.id)).map(n=>{
+    const r = remap.get(n.id);
+    return r ? {...n, x:r.x, y:r.y} : n;
+  });
+
+  const newEdges = [];
+  edges.forEach(e=>{
+    const rf = remap.get(e.from), rt = remap.get(e.to);
+    if(!rf && !rt){ newEdges.push(e); return; }
+    const from = rf ? rf.id : e.from, to = rt ? rt.id : e.to;
+    if(from===to) return; // collapsed into a self-loop (the two ends merged into the same point) -- drop it
+    let points = e.points;
+    if(rf) points = [[rf.x, rf.y], ...points.slice(1)];
+    if(rt) points = [...points.slice(0,-1), [rt.x, rt.y]];
+    newEdges.push({ ...e, from, to, points });
+  });
+
+  return { nodes: newNodes, edges: newEdges };
+}
+
+// A junction sitting almost right on top of a settlement point isn't really a
+// separate place -- it's that settlement's own road connection, landing a few
+// units off because of how pathfinding/splicing rounds things, or because a
+// splice point from another road happened to fall just short of the actual
+// settlement it was heading for. This absorbs any junction within snapDist of a
+// settlement node straight into it: every edge that touched the junction gets
+// rewired to end at the settlement instead, and the junction disappears
+// entirely. Settlement points themselves never move (only junctions do), so
+// this is safe to run unconditionally -- there's no "earlier layer's frozen
+// geometry" concern here, since nothing is reshaping a road's middle, just
+// snapping its very end onto the real point it was already effectively
+// terminating at.
+function snapJunctionsToSettlements(nodes, edges, snapDist){
+  if(snapDist<=0) return { nodes, edges };
+  const settlements = nodes.filter(n=>n.layer===1||n.layer===2||n.layer===3);
+  if(settlements.length===0) return { nodes, edges };
+  const grid = new SpatialGrid(Math.max(snapDist,1));
+  settlements.forEach(n=>grid.insert([n.x,n.y,n.id]));
+
+  const remap = new Map(); // junction id -> {id,x,y} of the settlement it snaps to
+  nodes.forEach(n=>{
+    if(n.layer!=='junction') return;
+    let best=null, bestDist=snapDist;
+    const cx=Math.floor(n.x/grid.cellSize), cy=Math.floor(n.y/grid.cellSize);
+    for(let dx=-1;dx<=1;dx++) for(let dy=-1;dy<=1;dy++){
+      const arr = grid.cells.get((cx+dx)+'_'+(cy+dy));
+      if(!arr) continue;
+      for(const p of arr){
+        const d = Math.hypot(n.x-p[0], n.y-p[1]);
+        if(d<bestDist){ bestDist=d; best={id:p[2], x:p[0], y:p[1]}; }
+      }
+    }
+    if(best) remap.set(n.id, best);
+  });
+  if(remap.size===0) return { nodes, edges };
+
+  const newNodes = nodes.filter(n=>!remap.has(n.id));
+  const newEdges = [];
+  edges.forEach(e=>{
+    const rf = remap.get(e.from), rt = remap.get(e.to);
+    if(!rf && !rt){ newEdges.push(e); return; }
+    const from = rf ? rf.id : e.from, to = rt ? rt.id : e.to;
+    if(from===to) return; // both ends landed on the same settlement -- drop the now-pointless stub
+    let points = e.points;
+    if(rf) points = [[rf.x, rf.y], ...points.slice(1)];
+    if(rt) points = [...points.slice(0,-1), [rt.x, rt.y]];
+    newEdges.push({ ...e, from, to, points });
+  });
+  return { nodes:newNodes, edges:newEdges };
+}
+
+// No distance/merge setting can fix a road that is simply POINTLESS as a route:
+// a short bubble where two roads leave the same place, run a few hundred meters
+// apart and rejoin, is two roads doing one road's job. Whether that reads as
+// "redundant" has nothing to do with how close the two are (they can be far
+// apart and still pointless) and everything to do with what the second one buys
+// you: if you deleted it, how much longer would the trip between its two ends
+// actually get? This asks exactly that, per road -- run a shortest-path search
+// between the road's own two endpoints with that road removed, and if some other
+// route gets there within detourFactor x its own length, the road saves nobody
+// any meaningful distance and is dropped. A genuine shortcut (the alternative is
+// a long way around) always survives, so this thins out bubbles without thinning
+// out the network's actual redundancy. Only the CURRENT layer's own roads are
+// candidates -- an earlier, frozen layer's geometry is never rewritten -- and
+// because removal requires an alternative route to already exist, connectivity
+// is preserved by construction.
+function removeRedundantEdges(nodes, edges, currentKind, detourFactor){
+  if(!(detourFactor > 1)) return edges;
+  const lengths = edges.map(e=>polylineLength(e.points));
+
+  const adj = new Map(); // node id -> [{other, idx, len}]
+  function link(a, b, idx){
+    if(!adj.has(a)) adj.set(a, []);
+    adj.get(a).push({other:b, idx, len:lengths[idx]});
+  }
+  edges.forEach((e,i)=>{ link(e.from, e.to, i); link(e.to, e.from, i); });
+
+  const removed = new Set();
+  // Bounded Dijkstra: anything past `limit` can't beat the road we're testing,
+  // so the search never expands beyond a small neighborhood of it.
+  function altRouteLength(start, goal, skipIdx, limit){
+    const dist = new Map([[start,0]]);
+    const heap = new MinHeap();
+    heap.push({node:start, f:0});
+    while(heap.size>0){
+      const cur = heap.pop();
+      if(cur.f > (dist.has(cur.node) ? dist.get(cur.node) : Infinity)) continue;
+      if(cur.node===goal) return cur.f;
+      if(cur.f > limit) break;
+      for(const a of (adj.get(cur.node)||[])){
+        if(a.idx===skipIdx || removed.has(a.idx)) continue;
+        const nd = cur.f + a.len;
+        if(nd > limit) continue;
+        if(nd < (dist.has(a.other) ? dist.get(a.other) : Infinity)){
+          dist.set(a.other, nd);
+          heap.push({node:a.other, f:nd});
+        }
+      }
+    }
+    return Infinity;
+  }
+
+  // Longest first: between two roads doing the same job, the long way round is
+  // the one worth losing.
+  const order = edges
+    .map((e,i)=>i)
+    .filter(i=>edges[i].kind===currentKind)
+    .sort((a,b)=>lengths[b]-lengths[a]);
+
+  for(const i of order){
+    const e = edges[i];
+    if(e.from===e.to){ removed.add(i); continue; }
+    const limit = detourFactor * lengths[i];
+    if(altRouteLength(e.from, e.to, i, limit) <= limit) removed.add(i);
+  }
+
+  return edges.filter((_,i)=>!removed.has(i));
+}
+
+// A junction with a single road on it is a road that leads nowhere -- a stub left
+// behind when whatever it used to connect to got trimmed, merged or dropped
+// somewhere upstream. Nothing about it is a real intersection, so it goes, along
+// with the road hanging off it; removing one can expose another behind it, so
+// this repeats until none are left. Junctions with NO roads left at all go too.
+// A stub whose road belongs to an earlier (frozen) layer is left alone -- same
+// rule as everywhere else: this layer extends what came before, never rewrites
+// it. Settlement points are never removed, however few roads reach them: a
+// village at the end of a dead-end road is a real place, not an artifact.
+function removeDeadEndStubs(nodes, edges, currentKind){
+  let curNodes = nodes, curEdges = edges;
+  for(let pass=0; pass<200; pass++){
+    const touching = new Map();
+    curEdges.forEach((e,i)=>{
+      if(!touching.has(e.from)) touching.set(e.from, []);
+      if(!touching.has(e.to)) touching.set(e.to, []);
+      touching.get(e.from).push(i);
+      touching.get(e.to).push(i);
+    });
+
+    const dead = new Set();
+    curNodes.forEach(n=>{
+      if(n.layer!=='junction') return;
+      const eIdxs = touching.get(n.id) || [];
+      if(eIdxs.length > 1) return;
+      if(eIdxs.some(i=>curEdges[i].kind !== currentKind)) return; // frozen layer's road -- leave it
+      dead.add(n.id);
+    });
+    if(dead.size===0) break;
+
+    curEdges = curEdges.filter(e=>!dead.has(e.from) && !dead.has(e.to));
+    curNodes = curNodes.filter(n=>!dead.has(n.id));
+  }
+  return { nodes: curNodes, edges: curEdges };
+}
+
+// Every merge/split/splice step above hands a junction a graph vertex wherever
+// two roads' sample points happened to land near each other, but plenty of those
+// vertices never end up meaning anything: a junction with exactly two roads
+// touching it isn't a real fork, it's just a seam left over from where two edge
+// fragments were stitched back together. That's most of "why are there so many
+// intersections without a real reason" -- each one, by itself, looks like an
+// actual crossroads on the map, but functionally it's just a waypoint on what
+// should read as a single continuous road. This collapses every such degree-2
+// junction by splicing its two edges into one and dropping the vertex, repeating
+// until none are left (a chain of several in a row collapses all the way down to
+// a single edge). Unlike declutterJunctions, this is NOT restricted to the
+// current layer's own junctions, and doesn't need to be: collapsing a seam moves
+// nothing -- the merged road's polyline is exactly the two fragments' points end
+// to end, every coordinate unchanged -- so an earlier, frozen layer's geometry
+// survives it untouched. The one thing that must be preserved is a road's CLASS,
+// so the two fragments have to be the same kind as each other: a seam where a
+// layer-1 road meets a layer-3 road is a real transition between two different
+// kinds of road, and merging those would have to throw one of the two classes
+// away. Same-kind seams collapse whichever layer they came from.
+function simplifyThroughJunctions(nodes, edges, currentKind){
+  let curNodes = nodes, curEdges = edges;
+  // One junction collapses per pass (removing it can change what its former
+  // neighbors' own degree looks like, so re-scanning fresh each time is the
+  // simplest way to stay correct); this only needs to comfortably outrun the
+  // number of junctions that could possibly need collapsing.
+  const maxPasses = nodes.length + 10;
+  const skip = new Set(); // seams examined and deliberately left alone
+  for(let pass=0; pass<maxPasses; pass++){
+    const touching = new Map(); // node id -> [edge indices]
+    curEdges.forEach((e,i)=>{
+      if(!touching.has(e.from)) touching.set(e.from, []);
+      if(!touching.has(e.to)) touching.set(e.to, []);
+      touching.get(e.from).push(i);
+      touching.get(e.to).push(i);
+    });
+
+    let target = null;
+    for(const n of curNodes){
+      if(n.layer!=='junction' || skip.has(n.id)) continue;
+      const eIdxs = touching.get(n.id);
+      if(!eIdxs || eIdxs.length!==2) continue;
+      if(eIdxs[0]===eIdxs[1]) continue; // a single edge looping both ends onto this node -- leave it alone
+      if(curEdges[eIdxs[0]].kind !== curEdges[eIdxs[1]].kind) continue; // real class transition, not a seam
+      target = { node:n, eIdxs };
+      break;
+    }
+    if(!target) break;
+
+    const [i1,i2] = target.eIdxs;
+    const e1 = curEdges[i1], e2 = curEdges[i2];
+    const nodeId = target.node.id;
+    // orient both edges so they run AWAY from the shared node, then concatenate
+    const seg1 = e1.from===nodeId ? e1.points.slice().reverse() : e1.points.slice();
+    const seg2 = e2.to===nodeId ? e2.points.slice().reverse() : e2.points.slice();
+    const newFrom = e1.from===nodeId ? e1.to : e1.from;
+    const newTo = e2.to===nodeId ? e2.from : e2.to;
+    // Both roads lead to the SAME other node, so this isn't a seam in one road --
+    // it's a two-road bubble between two places, and merging it would produce an
+    // edge whose two ends are the same node. Leave the whole thing alone and move
+    // on. (An earlier version deleted the junction here while leaving both roads
+    // still pointing at it, which left the roads referencing a node that no longer
+    // existed -- on export that reference resolves to nothing and the road arrives
+    // nowhere. The bubble itself is removeRedundantEdges' job, not this pass's.)
+    if(newFrom===newTo){ skip.add(nodeId); continue; }
+    const points = seg1.slice(0,-1).concat(seg2);
+    // kind is identical by the check above; role takes the more important of the
+    // two, so a backbone stretch never gets demoted to "loop" by being merged
+    // with one.
+    const role = (e1.role==='backbone' || e2.role==='backbone') ? 'backbone' : e1.role;
+    const merged = { from:newFrom, to:newTo, kind:e1.kind, role, viaTerrain: e1.viaTerrain && e2.viaTerrain, points };
+
+    curEdges = curEdges.filter((_,i)=>i!==i1 && i!==i2).concat([merged]);
+    curNodes = curNodes.filter(n=>n.id!==nodeId);
+  }
+  return { nodes: curNodes, edges: curEdges };
+}
+
+// Runs one layer's raw roads through corridor-merging + crossing-resolution against
+// an already-finalized (frozen) context. frozenEdges are never trimmed or removed --
+// only ever split to receive a splice point -- so a later layer can only extend the
+// network that came before it, never rewrite it.
+function applyLayerPostProcessing(nodes, frozenEdges, layerRawEdges, opts){
+  let curNodes = nodes, curEdges = frozenEdges;
+  let removedCount = 0, junctionsAdded = 0;
+
+  if(layerRawEdges.length===0) return { nodes: curNodes, edges: curEdges, removedCount, junctionsAdded };
+
+  const currentKind = layerRawEdges[0].kind;
+
+  if(opts.pruneParallel){
+    const beforeMerge = frozenEdges.concat(layerRawEdges);
+    const pr = mergeParallelCorridors(curNodes, frozenEdges, layerRawEdges, {
+      threshold: opts.parallelThreshold,
+      minRunLength: opts.parallelMinRunLength,
+      snapDist: opts.junctionSnap,
+      sampleStep: opts.sampleStep || 6
+    });
+    curEdges = ensureConnectivity(beforeMerge, pr.nodes, pr.edges);
+    curNodes = pr.nodes;
+    removedCount = pr.fullyMergedCount + pr.splitCount;
+  } else {
+    curEdges = frozenEdges.concat(layerRawEdges);
+  }
+
+  if(opts.resolveCrossings){
+    const ri = resolveIntersections(curNodes, curEdges, opts.junctionSnap);
+    curNodes = ri.nodes;
+    curEdges = ri.edges;
+    junctionsAdded = ri.junctionsAdded;
+  }
+
+  if(opts.pruneParallel || opts.resolveCrossings){
+    const dc = declutterJunctions(curNodes, curEdges, currentKind, opts.junctionSnap, opts.maxJunctionDegree);
+    curNodes = dc.nodes;
+    curEdges = dc.edges;
+
+    // A junction that landed almost on top of a settlement point is that
+    // settlement's own connection, not a separate place -- absorb it in.
+    const sn = snapJunctionsToSettlements(curNodes, curEdges, opts.junctionSnap);
+    curNodes = sn.nodes;
+    curEdges = sn.edges;
+
+    // Drop roads that save nobody any real distance (short pointless bubbles),
+    // then the dead-end stubs that removal can expose.
+    curEdges = removeRedundantEdges(curNodes, curEdges, currentKind, opts.detourFactor);
+    const de = removeDeadEndStubs(curNodes, curEdges, currentKind);
+    curNodes = de.nodes;
+    curEdges = de.edges;
+
+    // Consolidating close junctions above can itself leave a junction with
+    // exactly two roads on it (its other former neighbors landed in a
+    // different, degree-capped cluster, snapped into a settlement, or lost a
+    // road to the redundancy pass) -- clean those up too, same as any other
+    // pointless degree-2 seam.
+    const sj = simplifyThroughJunctions(curNodes, curEdges, currentKind);
+    curNodes = sj.nodes;
+    curEdges = sj.edges;
+  }
+
+  // Safety net, not a substitute for the passes above getting it right: a road
+  // whose endpoint names a node that no longer exists is silently fatal
+  // downstream -- the export writes the reference as nothing at all, and whatever
+  // reads it gets a road that arrives nowhere. Cheap to check, so check every
+  // time rather than trusting every future edit to this pipeline.
+  const liveIds = new Set(curNodes.map(n=>n.id));
+  const dangling = curEdges.filter(e=>!liveIds.has(e.from) || !liveIds.has(e.to));
+  if(dangling.length){
+    console.warn('post-processing left '+dangling.length+' road(s) pointing at a removed node; restoring those nodes');
+    // Put the missing nodes back (at the road end's own coordinates) rather than
+    // dropping the roads -- losing geometry is the worse failure of the two.
+    dangling.forEach(e=>{
+      if(!liveIds.has(e.from)){
+        const p = e.points[0];
+        curNodes.push({ id:e.from, x:p[0], y:p[1], layer:'junction', degree:0 });
+        liveIds.add(e.from);
+      }
+      if(!liveIds.has(e.to)){
+        const p = e.points[e.points.length-1];
+        curNodes.push({ id:e.to, x:p[0], y:p[1], layer:'junction', degree:0 });
+        liveIds.add(e.to);
+      }
+    });
+  }
+
+  return { nodes: curNodes, edges: curEdges, removedCount, junctionsAdded };
+}
+
+// Runs every layer's raw roads through applyLayerPostProcessing in order, each one
+// treating everything before it as an immutable, extend-only foundation. Also usable
+// standalone (e.g. to re-apply post-processing settings against cached raw layers
+// without re-running placement/pathfinding).
+// optsByLayer: {l1, l2, l3} -- each layer's raw edges are post-processed with
+// their OWN distances (see layerPostOpts), since a dense, small-scale layer and
+// a sparse, large-scale one don't need the same merge/snap tolerances.
+function applyAllLayeredPostProcessing(nodes, rawByLayerList, optsByLayer){
+  let curNodes = nodes;
+  let frozen = [];
+  let totalRemoved = 0, totalJunctions = 0;
+  const keys = ['l1','l2','l3'];
+  rawByLayerList.forEach((layerRaw, i)=>{
+    const opts = optsByLayer[keys[i]] || optsByLayer;
+    const result = applyLayerPostProcessing(curNodes, frozen, layerRaw, opts);
+    curNodes = result.nodes;
+    frozen = result.edges;
+    totalRemoved += result.removedCount;
+    totalJunctions += result.junctionsAdded;
+  });
+  return { nodes: curNodes, edges: frozen, removedCount: totalRemoved, junctionsAdded: totalJunctions };
+}
+
+
+
+function computeEmptyZones(nodes, edges, opts){
+  const cellSize = opts.cellSize;
+  const clearance = opts.clearance;
+  const cols = Math.ceil(W/cellSize);
+  const rows = Math.ceil(H/cellSize);
+
+  const srcGrid = new SpatialGrid(Math.max(cellSize, 10));
+  nodes.forEach(n => srcGrid.insert([n.x, n.y]));
+  edges.forEach(e=>{
+    const poly = e.points;
+    for(let i=0;i<poly.length-1;i++){
+      const [x1,y1]=poly[i], [x2,y2]=poly[i+1];
+      const segLen = Math.hypot(x2-x1,y2-y1);
+      const step = Math.max(1, Math.min(cellSize*0.6, clearance*0.5));
+      const steps = Math.max(1, Math.ceil(segLen/step));
+      for(let s=0;s<=steps;s++){
+        const t=s/steps;
+        srcGrid.insert([x1+(x2-x1)*t, y1+(y2-y1)*t]);
+      }
+    }
+  });
+
+  // occ[gx*rows+gy] = true if blocked (too close to a node/road)
+  const occ = new Uint8Array(cols*rows);
+  for(let gx=0; gx<cols; gx++){
+    for(let gy=0; gy<rows; gy++){
+      const cx = Math.min((gx+0.5)*cellSize, W);
+      const cy = Math.min((gy+0.5)*cellSize, H);
+      occ[gx*rows+gy] = srcGrid.anyWithin(cx, cy, clearance) ? 1 : 0;
+    }
+  }
+
+  // connected components over FREE cells (4-connectivity)
+  const label = new Int32Array(cols*rows).fill(-1);
+  let numLabels = 0;
+  const compCells = [];
+  for(let gx=0; gx<cols; gx++){
+    for(let gy=0; gy<rows; gy++){
+      const idx = gx*rows+gy;
+      if(occ[idx] || label[idx]!==-1) continue;
+      const id = numLabels++;
+      const cells = [];
+      const queue = [[gx,gy]];
+      label[idx] = id;
+      while(queue.length){
+        const [cxg,cyg] = queue.pop();
+        cells.push([cxg,cyg]);
+        const neighbors = [[cxg+1,cyg],[cxg-1,cyg],[cxg,cyg+1],[cxg,cyg-1]];
+        for(const [nx,ny] of neighbors){
+          if(nx<0||ny<0||nx>=cols||ny>=rows) continue;
+          const nidx = nx*rows+ny;
+          if(occ[nidx] || label[nidx]!==-1) continue;
+          label[nidx] = id;
+          queue.push([nx,ny]);
+        }
+      }
+      compCells.push(cells);
+    }
+  }
+
+  const isBlob = (gx,gy,id) => gx>=0 && gy>=0 && gx<cols && gy<rows && label[gx*rows+gy]===id;
+  const corner = (gx,gy) => [Math.min(gx*cellSize,W), Math.min(gy*cellSize,H)];
+
+  const zones = [];
+  compCells.forEach((cells, id) => {
+    if(cells.length < opts.minCells) return;
+
+    // collect directed boundary unit-edges (blob kept on a consistent side)
+    const edgeList = [];
+    for(const [gx,gy] of cells){
+      if(!isBlob(gx,gy-1,id)) edgeList.push([corner(gx+1,gy), corner(gx,gy)]);       // top
+      if(!isBlob(gx,gy+1,id)) edgeList.push([corner(gx,gy+1), corner(gx+1,gy+1)]);   // bottom
+      if(!isBlob(gx-1,gy,id)) edgeList.push([corner(gx,gy), corner(gx,gy+1)]);       // left
+      if(!isBlob(gx+1,gy,id)) edgeList.push([corner(gx+1,gy+1), corner(gx+1,gy)]);   // right
+    }
+
+    const keyOf = p => p[0]+'_'+p[1];
+    const startMap = new Map();
+    edgeList.forEach((e,i) => {
+      const k = keyOf(e[0]);
+      if(!startMap.has(k)) startMap.set(k, []);
+      startMap.get(k).push(i);
+    });
+    const used = new Array(edgeList.length).fill(false);
+
+    const loops = [];
+    for(let i=0;i<edgeList.length;i++){
+      if(used[i]) continue;
+      const loopPts = [];
+      let cur = i;
+      let guard = 0;
+      const startKey = keyOf(edgeList[i][0]);
+      while(guard++ < edgeList.length+2){
+        used[cur] = true;
+        loopPts.push(edgeList[cur][0]);
+        const nextKey = keyOf(edgeList[cur][1]);
+        if(nextKey === startKey) break;
+        const candidates = startMap.get(nextKey);
+        const nextIdx = candidates ? candidates.find(ci => !used[ci]) : undefined;
+        if(nextIdx===undefined) break;
+        cur = nextIdx;
+      }
+      if(loopPts.length>=4) loops.push(loopPts);
+    }
+    if(loops.length===0) return;
+
+    // keep only the outer ring (largest area); nested holes are dropped for this pass
+    loops.sort((a,b)=>polygonAreaAbs(b)-polygonAreaAbs(a));
+    const outer = chaikinClosed(loops[0], 3);
+    const cx = outer.reduce((s,p)=>s+p[0],0)/outer.length;
+    const cy = outer.reduce((s,p)=>s+p[1],0)/outer.length;
+
+    zones.push({
+      id: 'zone'+id,
+      points: outer.map(p=>[Math.round(p[0]*10)/10, Math.round(p[1]*10)/10]),
+      approxArea: cells.length*cellSize*cellSize,
+      centroid: [Math.round(cx*10)/10, Math.round(cy*10)/10]
+    });
+  });
+
+  return zones;
+}
+
+// ---------- layered generation ----------
+// opts = { l1:{seed,count,spacing,loopChance,curviness},
+//          l2:{seed,count,tether,spacing,loopChance,curviness},
+//          l3:{seed,count,tether,spacing,loopChance,curviness} }
+// Each layer uses its OWN rng stream, seeded independently. A later layer's
+// randomness never perturbs an earlier layer's draws; only the earlier
+// layer's *realized geometry* (as a placement/tether constraint) carries forward.
+// heightmap: Heightmap instance or null. terrain: {enabled, elevationRange, marginFactor,
+// l1:{minH,maxH,pointInfluence,maxGrade,slopeCostWeight}, l2:{...}, l3:{...}} -- ignored if heightmap is null.
+// postOpts: passed straight to the layered post-processing pass (see applyAllLayeredPostProcessing).
+// onProgress(done, total): optional, called as terrain-road pathfinding tasks complete.
+// resumeFrom: 1|2|3 -- layers BELOW this are reused from `cache` instead of being
+// recomputed. cache: {nodes, rawByLayer, layerResults} as returned alongside a
+// previous generate() call's result (see regenerateFrom in the UI wiring).
+async function generate(opts, heightmaps, terrain, postOpts, onProgress, resumeFrom, cache){
+  resumeFrom = resumeFrom || 1;
+  // heightmaps is {l1,l2,l3} -- the same terrain sampled at each layer's own
+  // resolution. `heightmap` below is whichever one the layer being worked on
+  // uses; every inner function reads it, so switching layers is one assignment.
+  if(heightmaps instanceof Heightmap) heightmaps = {l1:heightmaps, l2:heightmaps, l3:heightmaps};
+  heightmaps = heightmaps || {};
+  let heightmap = heightmaps.l1 || heightmaps.l2 || heightmaps.l3 || null;
+  const terrainActive = !!(heightmap && terrain && terrain.enabled);
+  const useWorkers = terrainActive && !!terrainWorkerPool;
+  function useLayerTerrain(key){
+    heightmap = heightmaps[key] || heightmap;
+    if(useWorkers) terrainWorkerPool.setHeightmap(heightmap);
+  }
+  let doneTasks = 0, totalTasks = 0;
+  const area = (W-2*MARGIN)*(H-2*MARGIN);
+  const FINE_CELL = 9;
+
+  const settlementGrid = new SpatialGrid(FINE_CELL);
+  const networkGrid = new SpatialGrid(FINE_CELL);
+
+  // {id,x,y,layer,degree} -- settlements only; junctions are added later, after all layers are placed.
+  // When resuming from layer 2 or 3, this starts pre-populated with just the
+  // cached (unchanged) earlier layers' settlement nodes -- sliced to the exact
+  // boundary those layers placed, so layers we DO recompute start fresh from there.
+  let prefixCount = 0;
+  if(resumeFrom>1 && cache){
+    prefixCount += cache.layers.l1.placed;
+    if(resumeFrom>2) prefixCount += cache.layers.l2.placed;
+  }
+  const nodes = prefixCount>0 ? cache.nodes.slice(0, prefixCount).map(n=>({...n})) : [];
+  const rawByLayer = { l1:[], l2:[], l3:[] };
+  if(resumeFrom>1 && cache){
+    rawByLayer.l1 = cache.rawByLayer.l1;
+    if(resumeFrom>2) rawByLayer.l2 = cache.rawByLayer.l2;
+  }
+
+  const ufCapacity = Math.max(1, opts.l1.count + opts.l2.count + opts.l3.count) + 4;
+  const uf = new UnionFind(ufCapacity);
+
+  function sampleAlongForNetwork(poly){
+    for(let i=0;i<poly.length-1;i++){
+      const [x1,y1]=poly[i], [x2,y2]=poly[i+1];
+      const segLen = Math.hypot(x2-x1,y2-y1);
+      const steps = Math.max(1, Math.ceil(segLen/12));
+      for(let s=0;s<=steps;s++){
+        const t=s/steps;
+        networkGrid.insert([x1+(x2-x1)*t, y1+(y2-y1)*t]);
+      }
+    }
+  }
+
+  // Replay the cached prefix into the grids/union-find so placement and Delaunay
+  // triangulation for the layers we DO recompute see the exact same context they
+  // would have in a full run -- without redoing any of the (possibly expensive,
+  // terrain-pathfinding-heavy) work that produced that prefix.
+  if(nodes.length>0){
+    const idToIndex = new Map();
+    nodes.forEach((n,i)=>{ idToIndex.set(n.id, i); settlementGrid.insert([n.x,n.y]); networkGrid.insert([n.x,n.y]); });
+    [...rawByLayer.l1, ...rawByLayer.l2].forEach(e=>{
+      sampleAlongForNetwork(e.points);
+      const ai = idToIndex.get(e.from), bi = idToIndex.get(e.to);
+      if(ai!=null && bi!=null) uf.union(ai, bi);
+    });
+  }
+
+  function placeLayerPoints(rng, count, layerNum, spacing, tetherDist, minTetherDist, layerTerrain){
+    const startIdx = nodes.length;
+    if(count<=0) return {startIdx, placedCount:0, requested:count};
+    const minDist = Math.sqrt(area/count) * spacing;
+    const requireTether = tetherDist!=null && networkGrid.cells.size>0;
+    const requireClearance = minTetherDist!=null && minTetherDist>0 && networkGrid.cells.size>0;
+    // snapshot the network as it exists BEFORE this layer places anything, so the
+    // clearance check measures distance from the upper layer's network only —
+    // not from sibling points of this same layer as they get placed one by one.
+    let clearanceGrid = null;
+    if(requireClearance){
+      clearanceGrid = new SpatialGrid(networkGrid.cellSize);
+      networkGrid.cells.forEach((arr,k) => clearanceGrid.cells.set(k, arr.slice()));
+    }
+    let attempts=0, maxAttempts=count*500;
+    let placedCount=0;
+    const deadline = Date.now() + 220;
+    while(placedCount<count && attempts<maxAttempts){
+      attempts++;
+      if((attempts & 511)===0 && Date.now()>deadline) break;
+      const x = MARGIN + rng()*(W-2*MARGIN);
+      const y = MARGIN + rng()*(H-2*MARGIN);
+      if(settlementGrid.anyWithin(x,y,minDist)) continue;
+      if(requireTether && !networkGrid.anyWithin(x,y,tetherDist)) continue;
+      if(requireClearance && clearanceGrid.anyWithin(x,y,minTetherDist)) continue;
+      if(terrainActive){
+        const suit = suitabilityAt(heightmap, x, y, layerTerrain, terrain.elevationRange);
+        if(rng() > suit) continue;
+      }
+      const p=[x,y];
+      settlementGrid.insert(p);
+      networkGrid.insert(p);
+      nodes.push({id:'n'+nodes.length, x, y, layer:layerNum, degree:0});
+      placedCount++;
+    }
+    return {startIdx, placedCount, requested:count};
+  }
+
+  async function buildLayerRoads(rng, layerNum, newStartIdx, loopChance, curviness, ropts){
+    const newEndIdx = nodes.length;
+    if(newEndIdx < 2 || newStartIdx >= newEndIdx) return {rawEdges:[], backboneCount:0, loopCount:0, fallbacks:0, impossible:0, relaxed:0};
+    const comboPts = nodes.slice(0, newEndIdx).map(n=>[n.x,n.y]);
+    const triangles = bowyerWatson(comboPts);
+    if(triangles.length===0) return {rawEdges:[], backboneCount:0, loopCount:0, fallbacks:0, impossible:0, relaxed:0};
+
+    const edgeMap = new Map();
+    for(const tri of triangles){
+      const [a,b,c] = tri;
+      [[a,b],[b,c],[c,a]].forEach(([i,j])=>{
+        const key = i<j ? i+'_'+j : j+'_'+i;
+        if(!edgeMap.has(key)) edgeMap.set(key, {a:Math.min(i,j), b:Math.max(i,j), length: dist(comboPts[i],comboPts[j])});
+      });
+    }
+    const allEdges = [...edgeMap.values()].sort((e1,e2)=>e1.length-e2.length);
+
+    // The MST "backbone" from the Delaunay triangulation guarantees connectivity;
+    // on top of that, some of the triangulation's other, non-tree edges ("loop
+    // candidates" -- always between two DISTINCT existing points, never a point
+    // and itself) are additionally kept as extra, redundant connections so the
+    // network reads as fuller than a bare tree. This is deliberately separate from
+    // a single road's own path ever curling back and crossing itself mid-route
+    // (stripSelfIntersections handles that, further down) -- "extra connections
+    // between different points" and "a road that loops back on itself" are two
+    // unrelated things.
+    const backbone = [];
+    const leftover = [];
+    for(const e of allEdges){
+      if(uf.union(e.a,e.b)) backbone.push(e);
+      else leftover.push(e);
+    }
+
+    const loopCandidates = leftover.filter(e => e.a>=newStartIdx || e.b>=newStartIdx);
+    const avgLen = backbone.length ? backbone.reduce((s,e)=>s+e.length,0)/backbone.length : 100;
+    const loopEdges = [];
+    for(const e of loopCandidates){
+      const p = loopChance * Math.exp(-e.length/(avgLen*1.1));
+      if(rng() < p) loopEdges.push(e);
+    }
+
+    [...backbone, ...loopEdges].forEach(e=>{ nodes[e.a].degree++; nodes[e.b].degree++; });
+
+    // Sub-seeds are drawn from the layer's own rng stream synchronously, in a fixed
+    // order, BEFORE any async dispatch -- this is what keeps the result fully
+    // deterministic for a given layer seed even though the actual pathfinding runs
+    // out-of-order across worker threads. (Because parallel tasks can't share one
+    // sequential rng stream, this consumes the layer's rng differently than the old
+    // single-threaded version did -- same seed, same validity, different exact layout.)
+    let layerFallbacks = 0, layerImpossible = 0, layerRelaxed = 0;
+    // Road-attraction (ropts.roadAttractionWeight > 0) needs each edge to see every
+    // road already built before it -- including this same layer's own edges, not
+    // just earlier layers' -- so it can actually run along one instead of tracing
+    // an independent near-duplicate a few meters off to the side. That's
+    // fundamentally sequential (edge N's search depends on edge N-1's result), so
+    // when it's switched on this bypasses the worker pool and Promise.all for
+    // this layer's edges and processes them one at a time, feeding each result
+    // into the shared networkGrid before starting the next. When it's off (the
+    // default), this takes the original fully-parallel fast path unchanged.
+    const attractionActive = terrainActive && ropts && (ropts.roadAttractionWeight||0) > 0 && (ropts.roadAttractionRadius||0) > 0;
+    async function toEdgeObjs(list, role){
+      const items = list.map(e=>{
+        const p1=[nodes[e.a].x, nodes[e.a].y], p2=[nodes[e.b].x, nodes[e.b].y];
+        return { e, p1, p2, subSeed: Math.floor(rng()*1e9) };
+      });
+      if(terrainActive) totalTasks += items.length;
+      let results;
+      if(attractionActive){
+        results = [];
+        for(const it of items){
+          const r = terrainPathOrFallback(mulberry32(it.subSeed), it.p1, it.p2, curviness, heightmap, ropts);
+          if(r){
+            r.points = stripSelfIntersections(r.points); // a single road never loops back across its own path
+            sampleAlongForNetwork(r.points); // so the NEXT edge in this same layer can already follow this one
+          }
+          doneTasks++; if(onProgress) onProgress(doneTasks, totalTasks);
+          results.push(r);
+        }
+      } else {
+        results = await Promise.all(items.map(async (it)=>{
+          let r;
+          if(!terrainActive){
+            r = { points: curvedPoints(mulberry32(it.subSeed), it.p1, it.p2, curviness), viaTerrain:false };
+          } else if(useWorkers){
+            r = await terrainWorkerPool.runTask({ p1:it.p1, p2:it.p2, curviness, ropts, seed:it.subSeed });
+            if(r && r.impossible) r = null;
+          } else {
+            r = terrainPathOrFallback(mulberry32(it.subSeed), it.p1, it.p2, curviness, heightmap, ropts);
+          }
+          if(r) r.points = stripSelfIntersections(r.points); // a single road never loops back across its own path
+          if(terrainActive){ doneTasks++; if(onProgress) onProgress(doneTasks, totalTasks); }
+          return r;
+        }));
+      }
+      // A null result is a road no legal route exists for. It is dropped here and
+      // never enters the graph, so nothing downstream can resurrect it as a
+      // straight line (ensureConnectivity can only re-add edges it was handed).
+      const built = [];
+      items.forEach((it,i)=>{
+        const r = results[i];
+        if(!r){ layerImpossible++; return; }
+        const {points, viaTerrain} = r;
+        if(terrainActive && !viaTerrain) layerFallbacks++;
+        if(terrainActive && r.tier > 1) layerRelaxed++;
+        if(!attractionActive) sampleAlongForNetwork(points); // already fed in above, in the sequential branch
+        built.push({ from: nodes[it.e.a].id, to: nodes[it.e.b].id, kind: 'layer'+layerNum, role, viaTerrain, points });
+      });
+      return built;
+    }
+    const builtBackbone = await toEdgeObjs(backbone, 'backbone');
+    const builtLoop = await toEdgeObjs(loopEdges, 'loop');
+    return {rawEdges: [...builtBackbone, ...builtLoop], backboneCount:backbone.length, loopCount:loopEdges.length, fallbacks:layerFallbacks, impossible:layerImpossible, relaxed:layerRelaxed};
+  }
+
+  // roadStartOffsetM is entered in real-world meters (same reasoning as the
+  // post-processing distances above) -- convert it to canvas units here using the
+  // map's km scale, so "80m lead-in" means the same physical distance regardless
+  // of how many km the map represents.
+  function layerRopts(layerTerrain, layerKey){
+    const metersPerUnit = terrain && terrain.km ? (terrain.km*1000)/W : 25;
+    // roadAttraction's radius reuses THIS layer's own postOpts "acceptable
+    // overlap" distance (the same notion of "close enough to count as the same
+    // corridor" that the post-processing merge pass uses for this layer) rather
+    // than a separate slider -- it's the same idea applied a step earlier,
+    // during pathfinding itself.
+    const layerPost = postOpts && layerKey ? postOpts[layerKey] : null;
+    const attractionRadius = layerPost && layerPost.parallelMinRunLength ? layerPost.parallelMinRunLength : (50/metersPerUnit);
+    return {
+      elevationRange: terrain ? terrain.elevationRange : 0,
+      marginFactor: terrain ? terrain.marginFactor : 0.9,
+      maxGrade: layerTerrain.maxGrade,
+      slopeCostWeight: layerTerrain.slopeCostWeight,
+      roadMinH: layerTerrain.roadMinH,
+      roadMaxH: layerTerrain.roadMaxH,
+      startOffset: (layerTerrain.roadStartOffsetM||0) / metersPerUnit,
+      roadAttractionWeight: Math.max(0, Math.min(1, (layerTerrain.roadAttraction||0)/100)),
+      roadAttractionRadius: attractionRadius,
+      attractionGrid: networkGrid
+    };
+  }
+
+  const rngL1 = mulberry32(opts.l1.seed);
+  let l1, l1Roads;
+  if(resumeFrom<=1){
+    useLayerTerrain('l1');
+    l1 = placeLayerPoints(rngL1, opts.l1.count, 1, opts.l1.spacing, null, null, terrain && terrain.l1);
+    l1Roads = await buildLayerRoads(rngL1, 1, l1.startIdx, opts.l1.loopChance, opts.l1.curviness, terrain && layerRopts(terrain.l1, 'l1'));
+    rawByLayer.l1 = l1Roads.rawEdges;
+  } else {
+    l1 = { startIdx:0, placedCount: cache.layers.l1.placed, requested: cache.layers.l1.requested };
+    l1Roads = cache.layers.l1.roads;
+  }
+
+  const rngL2 = mulberry32(opts.l2.seed);
+  let l2, l2Roads;
+  if(resumeFrom<=2){
+    useLayerTerrain('l2');
+    l2 = placeLayerPoints(rngL2, opts.l2.count, 2, opts.l2.spacing, opts.l2.tether, opts.l2.minTether, terrain && terrain.l2);
+    l2Roads = await buildLayerRoads(rngL2, 2, l2.startIdx, opts.l2.loopChance, opts.l2.curviness, terrain && layerRopts(terrain.l2, 'l2'));
+    rawByLayer.l2 = l2Roads.rawEdges;
+  } else {
+    l2 = { startIdx: l1.placedCount, placedCount: cache.layers.l2.placed, requested: cache.layers.l2.requested };
+    l2Roads = cache.layers.l2.roads;
+  }
+
+  const rngL3 = mulberry32(opts.l3.seed);
+  useLayerTerrain('l3');
+  const l3 = placeLayerPoints(rngL3, opts.l3.count, 3, opts.l3.spacing, opts.l3.tether, opts.l3.minTether, terrain && terrain.l3);
+  const l3Roads = await buildLayerRoads(rngL3, 3, l3.startIdx, opts.l3.loopChance, opts.l3.curviness, terrain && layerRopts(terrain.l3, 'l3'));
+  rawByLayer.l3 = l3Roads.rawEdges;
+
+  // ---- layered post-processing: layer 1 is finalized first, then layer 2 is
+  // merged/resolved against layer 1 as an IMMUTABLE context (never trimmed, only
+  // ever split to receive a splice point), then layer 3 against layers 1+2. Each
+  // layer only ever *extends* the network that came before it.
+  const pp = applyAllLayeredPostProcessing(nodes, [rawByLayer.l1, rawByLayer.l2, rawByLayer.l3], postOpts);
+
+  const totalLength = pp.edges.reduce((s,e)=>{ let L=0; for(let i=1;i<e.points.length;i++) L+=dist(e.points[i-1],e.points[i]); return s+L; },0);
+  const terrainFallbacks = l1Roads.fallbacks + l2Roads.fallbacks + l3Roads.fallbacks;
+  const terrainImpossible = (l1Roads.impossible||0) + (l2Roads.impossible||0) + (l3Roads.impossible||0);
+  const terrainRelaxed = (l1Roads.relaxed||0) + (l2Roads.relaxed||0) + (l3Roads.relaxed||0);
+  const rawCount = (rawByLayer.l1||[]).length + (rawByLayer.l2||[]).length + (rawByLayer.l3||[]).length;
+
+  return {
+    nodes: pp.nodes, edges: pp.edges,
+    placementNodes: nodes, rawByLayer,
+    layers: {
+      l1: {seed:opts.l1.seed, requested:l1.requested, placed:l1.placedCount, roads:l1Roads},
+      l2: {seed:opts.l2.seed, requested:l2.requested, placed:l2.placedCount, roads:l2Roads},
+      l3: {seed:opts.l3.seed, requested:l3.requested, placed:l3.placedCount, roads:l3Roads},
+    },
+    post: { removedCount: pp.removedCount, junctionsAdded: pp.junctionsAdded },
+    terrainFallbacks,
+    terrainImpossible,
+    terrainRelaxed,
+    rawCount,
+    totalLength
+  };
+}
+
+// ---------- rendering ----------
+function el(tag, attrs){
+  const n = document.createElementNS(SVGNS, tag);
+  for(const k in attrs) n.setAttribute(k, attrs[k]);
+  return n;
+}
+
+const ROAD_STYLE = {
+  layer3: {stroke:'var(--ink-tertiary)', width:1.2, dash:null, opacity:0.85},
+  layer2: {stroke:'var(--ink-secondary)', width:1.9, dash:null, opacity:0.9},
+  layer1: {stroke:'var(--ink-primary)', width:3.2, dash:null, opacity:1},
+};
+
+function render(data){
+  svg.innerHTML = '';
+  svg.appendChild(el('rect',{x:0,y:0,width:W,height:H,fill:'var(--bg-canvas)'}));
+
+  if(data.terrainVisible && data.heightmapDataURL){
+    svg.appendChild(el('image',{href:data.heightmapDataURL, x:0,y:0,width:W,height:H,opacity:0.6,'preserveAspectRatio':'none'}));
+  }
+
+  const grid = el('g',{});
+  for(let x=0; x<=W; x+=25){
+    grid.appendChild(el('line',{x1:x,y1:0,x2:x,y2:H,stroke: x%100===0?'var(--grid-line-strong)':'var(--grid-line)', 'stroke-width':1}));
+  }
+  for(let y=0; y<=H; y+=25){
+    grid.appendChild(el('line',{x1:0,y1:y,x2:W,y2:y,stroke: y%100===0?'var(--grid-line-strong)':'var(--grid-line)', 'stroke-width':1}));
+  }
+  svg.appendChild(grid);
+
+  if(data.zones && data.zonesVisible){
+    const zonesG = el('g',{});
+    data.zones.forEach(z=>{
+      if(z.points.length<3) return;
+      const d = 'M' + z.points.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L') + ' Z';
+      zonesG.appendChild(el('path',{d, fill:'var(--zone-fill)', stroke:'var(--zone-stroke)', 'stroke-width':1.2, 'stroke-linejoin':'round'}));
+    });
+    svg.appendChild(zonesG);
+  }
+
+  const roadsG = el('g',{});
+  ['layer3','layer2','layer1'].forEach(kind=>{
+    const style = ROAD_STYLE[kind];
+    data.edges.filter(e=>e.kind===kind).forEach(e=>{
+      const attrs = {d:roadPathD(e), fill:'none', stroke:style.stroke, 'stroke-width':style.width, 'stroke-linecap':'round', 'stroke-linejoin':'round', opacity:style.opacity};
+      if(style.dash) attrs['stroke-dasharray'] = style.dash;
+      roadsG.appendChild(el('path', attrs));
+    });
+  });
+  svg.appendChild(roadsG);
+
+  const nodesG = el('g',{});
+  data.nodes.forEach(nd=>{
+    if(nd.layer==='junction'){
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:3, fill:'var(--node-ring)'}));
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:2, fill:'var(--ink-secondary)'}));
+    } else if(nd.layer===3){
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:2.6, fill:'var(--node-fill)'}));
+    } else if(nd.layer===2){
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:6, fill:'var(--node-ring)'}));
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:4.6, fill:'var(--node-fill)'}));
+    } else if(nd.layer===1){
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:11.5, fill:'var(--node-ring)'}));
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:9.5, fill:'none', stroke:'var(--accent)', 'stroke-width':1.6}));
+      nodesG.appendChild(el('circle',{cx:nd.x, cy:nd.y, r:7, fill:'var(--node-fill)'}));
+    }
+  });
+  svg.appendChild(nodesG);
+
+  const cx=W-58, cy=58;
+  const compass = el('g',{ transform:`translate(${cx},${cy})`, opacity:0.85 });
+  compass.appendChild(el('circle',{cx:0,cy:0,r:26,fill:'none',stroke:'var(--text-dim)','stroke-width':1}));
+  compass.appendChild(el('path',{d:'M0,-22 L6,0 L0,22 L-6,0 Z', fill:'var(--ink-primary)'}));
+  const nLabel = el('text',{x:0,y:-32,'text-anchor':'middle', fill:'var(--text-dim)', 'font-family':'IBM Plex Mono, monospace', 'font-size':11});
+  nLabel.textContent='N';
+  compass.appendChild(nLabel);
+  svg.appendChild(compass);
+}
+
+// ---------- export ----------
+function download(filename, content, mime){
+  const blob = new Blob([content], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportSVG(){
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', SVGNS);
+  const style = document.createElement('style');
+  const cssVars = getComputedStyle(document.documentElement);
+  let css = ':root{';
+  ['--bg-canvas','--grid-line','--grid-line-strong','--ink-primary','--ink-secondary','--ink-tertiary','--node-fill','--node-ring','--accent','--text-dim']
+    .forEach(v=>{ css += `${v}:${cssVars.getPropertyValue(v)};`; });
+  css += '}';
+  style.textContent = css;
+  clone.insertBefore(style, clone.firstChild);
+  const xml = new XMLSerializer().serializeToString(clone);
+  download('road-network.svg', xml, 'image/svg+xml');
+}
+
+// ---------- export-only curve resampling (matches the rendered smooth path exactly) ----------
+function bezierQuadPoint(p0, pc, p1, t){
+  const mt = 1-t;
+  return [ mt*mt*p0[0] + 2*mt*t*pc[0] + t*t*p1[0], mt*mt*p0[1] + 2*mt*t*pc[1] + t*t*p1[1] ];
+}
+
+// Re-traces the exact same quadratic-bezier-through-midpoints curve that smoothPath()
+// draws on screen, at high resolution, so exported points follow the true visual road shape.
+function denseCurvePoints(pts, subdivPerSeg){
+  if(pts.length<2) return pts.map(p=>p.slice());
+  if(pts.length===2) return [pts[0].slice(), pts[1].slice()];
+  const out = [pts[0].slice()];
+  let curStart = pts[0];
+  for(let i=1;i<pts.length-1;i++){
+    const pc = pts[i];
+    const segEnd = [ (pts[i][0]+pts[i+1][0])/2, (pts[i][1]+pts[i+1][1])/2 ];
+    for(let s=1;s<=subdivPerSeg;s++){
+      out.push(bezierQuadPoint(curStart, pc, segEnd, s/subdivPerSeg));
+    }
+    curStart = segEnd;
+  }
+  out.push(pts[pts.length-1].slice());
+  return out;
+}
+
+function resampleEvenSpacing(densePts, spacing){
+  const cum = [0];
+  for(let i=1;i<densePts.length;i++) cum.push(cum[i-1] + dist(densePts[i-1], densePts[i]));
+  const total = cum[cum.length-1];
+  if(total < 1e-6) return [densePts[0].slice()];
+  // ceil, NOT round: the export contract is "a point at least every `spacing`
+  // units", and rounding DOWN stretches the real gap to as much as 1.5x that --
+  // a 186m hole where 125m was promised. Worst hit are short connector roads,
+  // which round down to a bare 2 points (just the two endpoints, nothing in
+  // between), so anything consuming the export by stamping its points leaves
+  // exactly those roads visibly unfinished right where they meet a junction or
+  // a point of interest. Ceil guarantees the real spacing is always <= asked.
+  const numPoints = Math.max(2, Math.ceil(total/spacing)+1);
+  const result = [];
+  let segIdx = 0;
+  for(let k=0;k<numPoints;k++){
+    const targetDist = k===numPoints-1 ? total : (k*total/(numPoints-1));
+    while(segIdx < cum.length-2 && cum[segIdx+1] < targetDist) segIdx++;
+    const segLen = (cum[segIdx+1]-cum[segIdx]) || 1e-9;
+    const t = (targetDist - cum[segIdx]) / segLen;
+    const p0=densePts[segIdx], p1=densePts[segIdx+1];
+    result.push([ p0[0]+(p1[0]-p0[0])*t, p0[1]+(p1[1]-p0[1])*t ]);
+  }
+  return result;
+}
+
+// ---------- numeric type codes for export (see LEGEND_CODES for meaning) ----------
+const LEGEND_CODES = {
+  layer: { large:1, medium:2, small:3, junction:4 },
+  kind:  { layer1:1, layer2:2, layer3:3 },
+  role:  { backbone:1, loop:2 }
+};
+const NODE_LAYER_CODE = { 1:1, 2:2, 3:3, junction:4 };
+const ROAD_KIND_CODE = { layer1:1, layer2:2, layer3:3 };
+const ROAD_ROLE_CODE = { backbone:1, loop:2 };
+
+function exportJSON(){
+  const gridCells = Math.round(num($('exGrid').value, 32));
+  const pointsPerCell = Math.round(num($('exDensity').value, 5));
+  const cellSizeUnits = W / gridCells; // canvas units per cell (assumes square W===H)
+  const spacingUnits = cellSizeUnits / pointsPerCell;
+  const toCell = v => Math.round((v/cellSizeUnits)*1000)/1000;
+
+  const keptNodes = state.nodes;
+  const keptEdges = state.edges;
+
+  // re-index to plain sequential numeric ids (0,1,2,...) instead of string ids like "n0"/"j3"
+  const idMap = new Map();
+  keptNodes.forEach((n,i) => idMap.set(n.id, i));
+
+  // Which road classes actually touch each node. A junction is SHARED between
+  // layers -- a layer-1 road and a layer-2 road can both end on the same one --
+  // so "the nodes belonging to layer 1" is not simply the nodes whose own layer
+  // is 1: it's those PLUS every junction a layer-1 road ends on. Importing one
+  // layer at a time without that second group leaves every road that ends on a
+  // junction with an endpoint that resolves to nothing.
+  const kindsAtNode = new Map();
+  keptEdges.forEach(e=>{
+    const k = ROAD_KIND_CODE[e.kind];
+    [e.from, e.to].forEach(id=>{
+      if(!kindsAtNode.has(id)) kindsAtNode.set(id, new Set());
+      kindsAtNode.get(id).add(k);
+    });
+  });
+
+  const data = {
+    seeds: { l1: state.layers.l1.seed, l2: state.layers.l2.seed, l3: state.layers.l3.seed },
+    // EVERY coordinate in this file (node x/y, road points, zone points) is in
+    // CELLS. cellSizeUnits/pointSpacingUnits describe the source canvas and are
+    // NOT in that coordinate space -- pointSpacingCells is the one to compare
+    // against coordinates, and equals exactly the step between a road's points.
+    grid: { cellsAcross: gridCells, cellsDown: gridCells, pointsPerCell,
+            coordinateUnit: 'cell', pointSpacingCells: 1/pointsPerCell,
+            cellSizeUnits, pointSpacingUnits: spacingUnits },
+    legend: LEGEND_CODES,
+    nodes: keptNodes.map((n,i)=>{
+      const kinds = kindsAtNode.get(n.id);
+      return {id:i, x:toCell(n.x), y:toCell(n.y), layer:NODE_LAYER_CODE[n.layer],
+              roadKinds: kinds ? [...kinds].sort() : []};
+    }),
+    roads: keptEdges.map(e=>{
+      const dense = e.viaTerrain ? e.points : denseCurvePoints(e.points, 14);
+      const evenPts = resampleEvenSpacing(dense, spacingUnits);
+      const pts = evenPts.map(p=>[toCell(p[0]), toCell(p[1])]);
+      // Pin the two ends to the EXACT same numbers the nodes are written with,
+      // instead of trusting two independent roundings of two separately-computed
+      // values to land on the same digits. A road has to arrive at its endpoints
+      // dead on, so whatever reads this can match road ends to points by value
+      // and not just by id.
+      const a = keptNodes[idMap.get(e.from)], b = keptNodes[idMap.get(e.to)];
+      if(a) pts[0] = [toCell(a.x), toCell(a.y)];
+      if(b) pts[pts.length-1] = [toCell(b.x), toCell(b.y)];
+      return { from:idMap.get(e.from), to:idMap.get(e.to), kind:ROAD_KIND_CODE[e.kind], role:ROAD_ROLE_CODE[e.role], points: pts };
+    }),
+    emptyZones: (state.zones||[]).map((z,i)=>({
+      id: i,
+      points: z.points.map(p=>[toCell(p[0]), toCell(p[1])]),
+      areaCells: Math.round((z.approxArea/(cellSizeUnits*cellSizeUnits))*100)/100,
+      centroid: [toCell(z.centroid[0]), toCell(z.centroid[1])]
+    }))
+  };
+  download('road-network.json', JSON.stringify(data,null,2), 'application/json');
+}
+
+// ---------- UI wiring ----------
+const $ = id => document.getElementById(id);
+const controls = {
+  l1: { seed:$('l1Seed'), count:$('l1Count'), spacing:$('l1Spacing'), loop:$('l1Loop'), curve:$('l1Curve'),
+        terrainMinH:$('l1TerrainMinH'), terrainMaxH:$('l1TerrainMaxH'), terrainPointInfluence:$('l1TerrainPointInfluence'),
+        terrainMaxGrade:$('l1TerrainMaxGrade'), terrainSlopeCost:$('l1TerrainSlopeCost'),
+        roadMinH:$('l1RoadMinH'), roadMaxH:$('l1RoadMaxH'), roadStartOffset:$('l1RoadStartOffset'), roadAttraction:$('l1RoadAttraction'), terrainRes:$('l1TerrainRes') },
+  l2: { seed:$('l2Seed'), count:$('l2Count'), tether:$('l2Tether'), minTether:$('l2MinTether'), spacing:$('l2Spacing'), loop:$('l2Loop'), curve:$('l2Curve'),
+        terrainMinH:$('l2TerrainMinH'), terrainMaxH:$('l2TerrainMaxH'), terrainPointInfluence:$('l2TerrainPointInfluence'),
+        terrainMaxGrade:$('l2TerrainMaxGrade'), terrainSlopeCost:$('l2TerrainSlopeCost'),
+        roadMinH:$('l2RoadMinH'), roadMaxH:$('l2RoadMaxH'), roadStartOffset:$('l2RoadStartOffset'), roadAttraction:$('l2RoadAttraction'), terrainRes:$('l2TerrainRes') },
+  l3: { seed:$('l3Seed'), count:$('l3Count'), tether:$('l3Tether'), minTether:$('l3MinTether'), spacing:$('l3Spacing'), loop:$('l3Loop'), curve:$('l3Curve'),
+        terrainMinH:$('l3TerrainMinH'), terrainMaxH:$('l3TerrainMaxH'), terrainPointInfluence:$('l3TerrainPointInfluence'),
+        terrainMaxGrade:$('l3TerrainMaxGrade'), terrainSlopeCost:$('l3TerrainSlopeCost'),
+        roadMinH:$('l3RoadMinH'), roadMaxH:$('l3RoadMaxH'), roadStartOffset:$('l3RoadStartOffset'), roadAttraction:$('l3RoadAttraction'), terrainRes:$('l3TerrainRes') }
+};
+const zoneControls = {
+  show: $('zoneShow'), clearance: $('zoneClearance'), cell: $('zoneCell'), minCells: $('zoneMinCells')
+};
+const postControls = {
+  prune: $('ppPrune'), cross: $('ppCross'), maxDegree: $('ppMaxDegree'), detour: $('ppDetour'),
+  l1: { threshold:$('l1PpThreshold'), fraction:$('l1PpFraction'), snap:$('l1PpSnap'), sampleStep:$('l1PpSampleStep') },
+  l2: { threshold:$('l2PpThreshold'), fraction:$('l2PpFraction'), snap:$('l2PpSnap'), sampleStep:$('l2PpSampleStep') },
+  l3: { threshold:$('l3PpThreshold'), fraction:$('l3PpFraction'), snap:$('l3PpSnap'), sampleStep:$('l3PpSampleStep') }
+};
+const terrainControls = {
+  enabled: $('terrainEnabled'), seed: $('terrainSeed'), scale: $('terrainScale'), octaves: $('terrainOctaves'),
+  range: $('terrainRange'), km: $('terrainKm'), show: $('terrainShow'), file: $('terrainFile')
+};
+const labels = {
+  l1: { count:$('l1CountVal'), spacing:$('l1SpacingVal'), loop:$('l1LoopVal'), curve:$('l1CurveVal'),
+        terrainMinH:$('l1TerrainMinHVal'), terrainMaxH:$('l1TerrainMaxHVal'), terrainPointInfluence:$('l1TerrainPointInfluenceVal'),
+        terrainMaxGrade:$('l1TerrainMaxGradeVal'), terrainSlopeCost:$('l1TerrainSlopeCostVal'),
+        roadMinH:$('l1RoadMinHVal'), roadMaxH:$('l1RoadMaxHVal'), roadStartOffset:$('l1RoadStartOffsetVal'), roadAttraction:$('l1RoadAttractionVal'), terrainRes:$('l1TerrainResVal') },
+  l2: { count:$('l2CountVal'), tether:$('l2TetherVal'), minTether:$('l2MinTetherVal'), spacing:$('l2SpacingVal'), loop:$('l2LoopVal'), curve:$('l2CurveVal'),
+        terrainMinH:$('l2TerrainMinHVal'), terrainMaxH:$('l2TerrainMaxHVal'), terrainPointInfluence:$('l2TerrainPointInfluenceVal'),
+        terrainMaxGrade:$('l2TerrainMaxGradeVal'), terrainSlopeCost:$('l2TerrainSlopeCostVal'),
+        roadMinH:$('l2RoadMinHVal'), roadMaxH:$('l2RoadMaxHVal'), roadStartOffset:$('l2RoadStartOffsetVal'), roadAttraction:$('l2RoadAttractionVal'), terrainRes:$('l2TerrainResVal') },
+  l3: { count:$('l3CountVal'), tether:$('l3TetherVal'), minTether:$('l3MinTetherVal'), spacing:$('l3SpacingVal'), loop:$('l3LoopVal'), curve:$('l3CurveVal'),
+        terrainMinH:$('l3TerrainMinHVal'), terrainMaxH:$('l3TerrainMaxHVal'), terrainPointInfluence:$('l3TerrainPointInfluenceVal'),
+        terrainMaxGrade:$('l3TerrainMaxGradeVal'), terrainSlopeCost:$('l3TerrainSlopeCostVal'),
+        roadMinH:$('l3RoadMinHVal'), roadMaxH:$('l3RoadMaxHVal'), roadStartOffset:$('l3RoadStartOffsetVal'), roadAttraction:$('l3RoadAttractionVal'), terrainRes:$('l3TerrainResVal') }
+};
+const zoneLabels = { clearance:$('zoneClearanceVal'), cell:$('zoneCellVal'), minCells:$('zoneMinCellsVal') };
+const postLabels = {
+  maxDegree: $('ppMaxDegreeVal'), detour: $('ppDetourVal'),
+  l1: { threshold:$('l1PpThresholdVal'), fraction:$('l1PpFractionVal'), snap:$('l1PpSnapVal'), sampleStep:$('l1PpSampleStepVal') },
+  l2: { threshold:$('l2PpThresholdVal'), fraction:$('l2PpFractionVal'), snap:$('l2PpSnapVal'), sampleStep:$('l2PpSampleStepVal') },
+  l3: { threshold:$('l3PpThresholdVal'), fraction:$('l3PpFractionVal'), snap:$('l3PpSnapVal'), sampleStep:$('l3PpSampleStepVal') }
+};
+const terrainLabels = {
+  scale:$('terrainScaleVal'), octaves:$('terrainOctavesVal'), range:$('terrainRangeVal')
+};
+
+let currentHeightmaps = {l1:null,l2:null,l3:null};
+let uploadedHeightmap = null;
+let uploadedImage = null;
+let heightmapDataURL = null;
+
+let state = null;
+let generationToken = 0; // guards against a slower stale regenerate() overwriting a newer one
+
+const WORKERS_AVAILABLE = typeof Worker !== 'undefined' && typeof Blob !== 'undefined' && typeof URL.createObjectURL !== 'undefined';
+const WORKER_POOL_SIZE = WORKERS_AVAILABLE ? Math.max(2, Math.min(12, (navigator.hardwareConcurrency||4))) : 0;
+let terrainWorkerPool = null;
+if(WORKERS_AVAILABLE){
+  try{ terrainWorkerPool = new TerrainWorkerPool(WORKER_POOL_SIZE); }
+  catch(err){ console.warn('Worker pool unavailable, falling back to single-threaded terrain pathfinding:', err); terrainWorkerPool = null; }
+}
+
+function num(v, fallback){ const n = parseFloat(v); return Number.isFinite(n) ? n : fallback; }
+
+function currentOpts(){
+  return {
+    l1: {
+      seed: Math.round(num(controls.l1.seed.value, 20260910)),
+      count: Math.round(num(controls.l1.count.value, 6)),
+      spacing: num(controls.l1.spacing.value, 1.0),
+      loopChance: num(controls.l1.loop.value, 0.3),
+      curviness: num(controls.l1.curve.value, 0.4)
+    },
+    l2: {
+      seed: Math.round(num(controls.l2.seed.value, 314159265)),
+      count: Math.round(num(controls.l2.count.value, 24)),
+      tether: num(controls.l2.tether.value, 220),
+      minTether: num(controls.l2.minTether.value, 25),
+      spacing: num(controls.l2.spacing.value, 0.7),
+      loopChance: num(controls.l2.loop.value, 0.35),
+      curviness: num(controls.l2.curve.value, 0.45)
+    },
+    l3: {
+      seed: Math.round(num(controls.l3.seed.value, 271828182)),
+      count: Math.round(num(controls.l3.count.value, 90)),
+      tether: num(controls.l3.tether.value, 90),
+      minTether: num(controls.l3.minTether.value, 12),
+      spacing: num(controls.l3.spacing.value, 0.35),
+      loopChance: num(controls.l3.loop.value, 0.4),
+      curviness: num(controls.l3.curve.value, 0.5)
+    }
+  };
+}
+
+function zoneOpts(){
+  return {
+    clearance: num(zoneControls.clearance.value, 30),
+    cellSize: Math.round(num(zoneControls.cell.value, 16)),
+    minCells: Math.round(num(zoneControls.minCells.value, 6))
+  };
+}
+
+// All post-processing distances are entered in real-world meters (so "how much
+// overlap is acceptable" and "how finely to resample" mean the same thing
+// regardless of map scale); they're converted here to the canvas units the
+// geometry code actually works in, using the map's km-per-800-units scale.
+// Each layer has its own distances now (layer 1's limits run ×4 of layer 3's,
+// layer 2's ×2 -- bigger, sparser roads and their junctions need more slack than
+// a dense tangle of small ones does), while "on/off" for the merge and
+// crossing-resolution passes stays a single shared switch for all three.
+function layerPostOpts(layerKey, defaults){
+  const c = postControls[layerKey];
+  const km = num(terrainControls.km.value, 20);
+  const metersPerUnit = (km*1000)/W;
+  return {
+    pruneParallel: postControls.prune.checked,
+    parallelThreshold: num(c.threshold.value, defaults.threshold) / metersPerUnit,
+    parallelMinRunLength: num(c.fraction.value, defaults.fraction) / metersPerUnit,
+    resolveCrossings: postControls.cross.checked,
+    junctionSnap: num(c.snap.value, defaults.snap) / metersPerUnit,
+    sampleStep: Math.max(0.5, num(c.sampleStep.value, defaults.sampleStep) / metersPerUnit),
+    maxJunctionDegree: Math.round(num(postControls.maxDegree.value, 4)),
+    detourFactor: num(postControls.detour.value, 1.5)
+  };
+}
+
+function postOptsAll(){
+  return {
+    l1: layerPostOpts('l1', {threshold:100, fraction:200, snap:80, sampleStep:10}),
+    l2: layerPostOpts('l2', {threshold:50, fraction:100, snap:40, sampleStep:10}),
+    l3: layerPostOpts('l3', {threshold:25, fraction:50, snap:20, sampleStep:10})
+  };
+}
+
+function refreshPostLabels(){
+  postLabels.maxDegree.value = postControls.maxDegree.value;
+  postLabels.detour.value = postControls.detour.value;
+  ['l1','l2','l3'].forEach(layerKey=>{
+    const c = postControls[layerKey], l = postLabels[layerKey];
+    l.threshold.value = c.threshold.value;
+    l.fraction.value = c.fraction.value;
+    l.snap.value = c.snap.value;
+    l.sampleStep.value = c.sampleStep.value;
+    $(layerKey+'PpThresholdM').textContent = c.threshold.value + ' m';
+    $(layerKey+'PpFractionM').textContent = c.fraction.value + ' m';
+    $(layerKey+'PpSnapM').textContent = c.snap.value + ' m';
+    $(layerKey+'PpSampleStepM').textContent = c.sampleStep.value + ' m';
+  });
+}
+
+function layerTerrainOpts(layerKey, defaults){
+  const c = controls[layerKey];
+  return {
+    minH: num(c.terrainMinH.value, defaults.minH),
+    maxH: num(c.terrainMaxH.value, defaults.maxH),
+    pointInfluence: num(c.terrainPointInfluence.value, defaults.pointInfluence),
+    maxGrade: num(c.terrainMaxGrade.value, defaults.maxGrade),
+    slopeCostWeight: num(c.terrainSlopeCost.value, defaults.slopeCostWeight),
+    roadMinH: num(c.roadMinH.value, defaults.roadMinH),
+    roadMaxH: num(c.roadMaxH.value, defaults.roadMaxH),
+    roadStartOffsetM: num(c.roadStartOffset.value, defaults.roadStartOffsetM),
+    roadAttraction: num(c.roadAttraction.value, defaults.roadAttraction),
+    resolution: Math.round(num(c.terrainRes.value, defaults.resolution))
+  };
+}
+
+function terrainOpts(){
+  return {
+    enabled: terrainControls.enabled.checked,
+    source: document.querySelector('input[name="terrainSource"]:checked').value,
+    seed: Math.round(num(terrainControls.seed.value, 424242)),
+    scale: num(terrainControls.scale.value, 0.03),
+    octaves: Math.round(num(terrainControls.octaves.value, 4)),
+    elevationRange: num(terrainControls.range.value, 100),
+    marginFactor: 0.9,
+    km: num(terrainControls.km.value, 20),
+    l1: layerTerrainOpts('l1', {minH:0.15, maxH:0.75, pointInfluence:0.7, maxGrade:0.22, slopeCostWeight:1.0, roadMinH:0, roadMaxH:1, roadStartOffsetM:80, roadAttraction:0, resolution:200}),
+    l2: layerTerrainOpts('l2', {minH:0.15, maxH:0.75, pointInfluence:0.7, maxGrade:0.18, slopeCostWeight:1.2, roadMinH:0, roadMaxH:1, roadStartOffsetM:60, roadAttraction:0, resolution:400}),
+    l3: layerTerrainOpts('l3', {minH:0.15, maxH:0.75, pointInfluence:0.7, maxGrade:0.15, slopeCostWeight:1.4, roadMinH:0, roadMaxH:1, roadStartOffsetM:30, roadAttraction:0, resolution:800})
+  };
+}
+
+function refreshTerrainLabels(){
+  terrainLabels.scale.value = terrainControls.scale.value;
+  terrainLabels.octaves.value = terrainControls.octaves.value;
+  terrainLabels.range.value = terrainControls.range.value;
+  const km = num(terrainControls.km.value, 20);
+  const metersPerUnit = (km*1000)/W;
+  const elevM = num(terrainControls.range.value, 100) * metersPerUnit;
+  $('terrainRangeM').textContent = '≈' + Math.round(elevM) + ' m';
+
+  ['l1','l2','l3'].forEach(layerKey=>{
+    const c = controls[layerKey], l = labels[layerKey];
+    l.terrainMinH.value = parseFloat(c.terrainMinH.value).toFixed(2);
+    l.terrainMaxH.value = parseFloat(c.terrainMaxH.value).toFixed(2);
+    l.terrainPointInfluence.value = parseFloat(c.terrainPointInfluence.value).toFixed(2);
+    l.terrainMaxGrade.value = c.terrainMaxGrade.value;
+    l.terrainSlopeCost.value = c.terrainSlopeCost.value;
+    l.roadMinH.value = parseFloat(c.roadMinH.value).toFixed(2);
+    l.roadMaxH.value = parseFloat(c.roadMaxH.value).toFixed(2);
+    l.roadStartOffset.value = c.roadStartOffset.value;
+    $(layerKey+'RoadStartOffsetM').textContent = c.roadStartOffset.value + ' m';
+    l.roadAttraction.value = c.roadAttraction.value;
+    l.terrainRes.value = c.terrainRes.value;
+    const layerRes = num(c.terrainRes.value, 400);
+    const mPerCell = (km*1000)/layerRes;
+    $(layerKey+'TerrainResM').textContent = '≈' + (mPerCell>=10 ? mPerCell.toFixed(0) : mPerCell.toFixed(1)) + ' m/cell';
+    const gradePct = num(c.terrainMaxGrade.value, 0.18) * 100;
+    $(layerKey+'TerrainMaxGradePct').textContent = '≈' + gradePct.toFixed(0) + ' %';
+  });
+}
+
+// Each layer gets its own heightmap resolution: the same terrain (same seed,
+// scale, octaves, or the same uploaded image), just sampled finer or coarser.
+// A coarse grid gives layer 1 long, smooth trunk roads that ignore small bumps,
+// while a fine one lets layer 3's little roads react to detail the big roads
+// shouldn't care about. Identical resolutions are built once and shared.
+function rebuildHeightmapIfNeeded(){
+  const t = terrainOpts();
+  if(!t.enabled){ currentHeightmaps = {l1:null,l2:null,l3:null}; heightmapDataURL = null; return; }
+  const byRes = new Map();
+  const build = res => {
+    if(byRes.has(res)) return byRes.get(res);
+    const hm = t.source==='img'
+      ? (uploadedImage ? rasterizeUploadedImage(res, res) : null)
+      : generateProceduralHeightmap(res, res, t.seed, t.scale, t.octaves);
+    byRes.set(res, hm);
+    return hm;
+  };
+  currentHeightmaps = { l1: build(t.l1.resolution), l2: build(t.l2.resolution), l3: build(t.l3.resolution) };
+  if(t.source==='img') uploadedHeightmap = currentHeightmaps.l1;
+  // the backdrop shows the finest of the three -- it's the same terrain either way
+  const finest = [t.l1.resolution,t.l2.resolution,t.l3.resolution].indexOf(Math.max(t.l1.resolution,t.l2.resolution,t.l3.resolution));
+  const shown = currentHeightmaps[['l1','l2','l3'][finest]];
+  HEIGHT_COLS = HEIGHT_ROWS = shown ? shown.cols : HEIGHT_COLS;
+  heightmapDataURL = shown ? heightmapToDataURL(shown) : null;
+}
+
+function heightmapToDataURL(heightmap){
+  const canvas = document.createElement('canvas');
+  canvas.width = heightmap.cols; canvas.height = heightmap.rows;
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(heightmap.cols, heightmap.rows);
+  for(let i=0;i<heightmap.data.length;i++){
+    const [r,g,b] = terrainColorRamp(heightmap.data[i]);
+    imgData.data[i*4]=r; imgData.data[i*4+1]=g; imgData.data[i*4+2]=b; imgData.data[i*4+3]=255;
+  }
+  ctx.putImageData(imgData,0,0);
+  return canvas.toDataURL('image/png');
+}
+
+function refreshZoneLabels(){
+  zoneLabels.clearance.value = zoneControls.clearance.value;
+  zoneLabels.cell.value = zoneControls.cell.value;
+  zoneLabels.minCells.value = zoneControls.minCells.value;
+}
+
+function refreshLabels(){
+  labels.l1.count.value = controls.l1.count.value;
+  labels.l1.spacing.value = parseFloat(controls.l1.spacing.value).toFixed(2);
+  labels.l1.loop.value = parseFloat(controls.l1.loop.value).toFixed(2);
+  labels.l1.curve.value = parseFloat(controls.l1.curve.value).toFixed(2);
+
+  labels.l2.count.value = controls.l2.count.value;
+  labels.l2.tether.value = controls.l2.tether.value;
+  labels.l2.minTether.value = controls.l2.minTether.value;
+  labels.l2.spacing.value = parseFloat(controls.l2.spacing.value).toFixed(2);
+  labels.l2.loop.value = parseFloat(controls.l2.loop.value).toFixed(2);
+  labels.l2.curve.value = parseFloat(controls.l2.curve.value).toFixed(2);
+
+  labels.l3.count.value = controls.l3.count.value;
+  labels.l3.tether.value = controls.l3.tether.value;
+  labels.l3.minTether.value = controls.l3.minTether.value;
+  labels.l3.spacing.value = parseFloat(controls.l3.spacing.value).toFixed(2);
+  labels.l3.loop.value = parseFloat(controls.l3.loop.value).toFixed(2);
+  labels.l3.curve.value = parseFloat(controls.l3.curve.value).toFixed(2);
+
+  refreshTerrainLabels();
+}
+
+function layerLine(name, L){
+  const shortfall = L.requested - L.placed;
+  const warn = shortfall>0 ? ` <span class="warn">(of ${L.requested}, crowded)</span>` : '';
+  return `${name}: <b>${L.placed}</b>${warn} · roads: <b>${L.roads.backboneCount+L.roads.loopCount}</b> <span class="seedtag">#${L.seed}</span>`;
+}
+
+function refreshStats(data){
+  const terrainLine = (data.terrainFallbacks!=null && terrainControls.enabled.checked)
+    ? `Terrain-routed roads: <b>${data.edges.length}</b> · not built (no route): <b>${data.terrainImpossible||0}</b><br>`
+      + `Within grade limit: <b>${(data.rawCount||0) - (data.terrainRelaxed||0)}</b> of <b>${data.rawCount||0}</b> routed<br>`
+    : '';
+  $('stats').innerHTML =
+    layerLine('Major', data.layers.l1) + '<br>' +
+    layerLine('Medium', data.layers.l2) + '<br>' +
+    layerLine('Minor', data.layers.l3) + '<br>' +
+    terrainLine +
+    `Duplicates removed: <b>${data.post.removedCount}</b> · Junctions: <b>${data.post.junctionsAdded}</b><br>` +
+    `Total length: <b>${Math.round(data.totalLength)}</b> units<br>` +
+    `Empty zones: <b>${data.zones.length}</b> (~<b>${Math.round(data.zones.reduce((s,z)=>s+z.approxArea,0))}</b> units²)`;
+}
+
+async function regenerateFrom(level){
+  const myToken = ++generationToken;
+  const canResume = level>1 && state && state.placementNodes && state.rawByLayer && state.layers;
+  showGenOverlay(canResume ? `Rebuilding layer ${level}…` : 'Rebuilding network…');
+
+  rebuildHeightmapIfNeeded();
+  const tOpts = terrainOpts();
+  const wantsWorkers = tOpts.enabled && (currentHeightmaps.l1 || currentHeightmaps.l2 || currentHeightmaps.l3);
+  if(wantsWorkers) showGenOverlay('Routing roads over terrain…');
+
+  const cache = canResume ? { nodes: state.placementNodes, rawByLayer: state.rawByLayer, layers: state.layers } : null;
+
+  const raw = await generate(currentOpts(), currentHeightmaps, tOpts, postOptsAll(), (done,total)=>{
+    if(myToken !== generationToken) return; // a newer regenerate() superseded this one
+    showGenOverlay('Routing roads over terrain…', `${done} / ${total}${terrainWorkerPool ? '  ·  ' + terrainWorkerPool.size + ' threads' : ''}`);
+  }, cache ? level : 1, cache);
+
+  if(myToken !== generationToken){ return; } // stale -- a newer call already started/finished
+
+  state = {
+    ...raw,
+    placementNodes: raw.placementNodes,
+    rawByLayer: raw.rawByLayer,
+    heightmapDataURL,
+    terrainVisible: tOpts.enabled && terrainControls.show.checked
+  };
+  state.zones = zoneControls.show.checked ? computeEmptyZones(state.nodes, state.edges, zoneOpts()) : [];
+  state.zonesVisible = zoneControls.show.checked;
+  refreshLabels();
+  refreshPostLabels();
+  refreshZoneLabels();
+  refreshTerrainLabels();
+  refreshStats(state);
+  render(state);
+  hideGenOverlay();
+}
+
+function regenerate(){ return regenerateFrom(1); }
+
+function showGenOverlay(text, subtext){
+  const overlay = $('calcOverlay');
+  if(overlay){
+    $('calcText').textContent = text;
+    $('calcSubtext').textContent = subtext || '';
+    overlay.style.display = 'flex';
+  }
+  showGenStatus(subtext ? `${text} ${subtext}` : text);
+}
+function hideGenOverlay(){
+  const overlay = $('calcOverlay');
+  if(overlay) overlay.style.display = 'none';
+  hideGenStatus();
+}
+
+function showGenStatus(text){
+  const el = $('genStatus');
+  if(!el) return;
+  el.textContent = text;
+  el.style.display = '';
+}
+function hideGenStatus(){
+  const el = $('genStatus');
+  if(!el) return;
+  el.style.display = 'none';
+}
+
+function refreshPostProcessingOnly(){
+  if(!state || !state.rawByLayer) return;
+  const pp = applyAllLayeredPostProcessing(state.placementNodes, [state.rawByLayer.l1, state.rawByLayer.l2, state.rawByLayer.l3], postOptsAll());
+  state.nodes = pp.nodes;
+  state.edges = pp.edges;
+  state.post = { removedCount: pp.removedCount, junctionsAdded: pp.junctionsAdded };
+  state.zones = zoneControls.show.checked ? computeEmptyZones(state.nodes, state.edges, zoneOpts()) : [];
+  state.zonesVisible = zoneControls.show.checked;
+  refreshPostLabels();
+  refreshZoneLabels();
+  refreshStats(state);
+  render(state);
+}
+
+function refreshZonesOnly(){
+  if(!state) return;
+  state.zones = zoneControls.show.checked ? computeEmptyZones(state.nodes, state.edges, zoneOpts()) : [];
+  state.zonesVisible = zoneControls.show.checked;
+  refreshZoneLabels();
+  refreshStats(state);
+  render(state);
+}
+
+const LAYER_LEVEL = { l1:1, l2:2, l3:3 };
+
+function randomizeSeed(layerKey){
+  if(layerKey==='terrain'){ terrainControls.seed.value = Math.floor(Math.random()*1e9); regenerateFrom(1); return; }
+  controls[layerKey].seed.value = Math.floor(Math.random()*1e9);
+  regenerateFrom(LAYER_LEVEL[layerKey]);
+}
+
+function randomizeAllSeeds(){
+  ['l1','l2','l3'].forEach(k => { controls[k].seed.value = Math.floor(Math.random()*1e9); });
+  terrainControls.seed.value = Math.floor(Math.random()*1e9);
+  regenerateFrom(1);
+}
+
+// Two-way binding between a range slider and its paired number input: typing a
+// value snaps it into range, pushes it to the slider, and fires the slider's own
+// 'change' listener so exact keyboard entry behaves just like dragging it.
+function wireNumberToRange(rangeEl, numberEl){
+  if(!rangeEl || !numberEl) return;
+  numberEl.addEventListener('change', ()=>{
+    let v = parseFloat(numberEl.value);
+    const min = parseFloat(rangeEl.min), max = parseFloat(rangeEl.max);
+    if(!Number.isFinite(v)) v = parseFloat(rangeEl.value);
+    v = Math.max(min, Math.min(max, v));
+    numberEl.value = v;
+    rangeEl.value = v;
+    rangeEl.dispatchEvent(new Event('change', {bubbles:true}));
+  });
+  numberEl.addEventListener('keydown', (e)=>{ if(e.key==='Enter') numberEl.blur(); });
+}
+
+function wireAllNumberMirrors(){
+  Object.keys(controls).forEach(layerKey=>{
+    Object.keys(controls[layerKey]).forEach(field=>{
+      if(field==='seed') return; // the seed field IS a number input already, nothing to mirror
+      const rangeEl = controls[layerKey][field];
+      const numberEl = labels[layerKey] && labels[layerKey][field];
+      wireNumberToRange(rangeEl, numberEl);
+    });
+  });
+  wireNumberToRange(zoneControls.clearance, zoneLabels.clearance);
+  wireNumberToRange(zoneControls.cell, zoneLabels.cell);
+  wireNumberToRange(zoneControls.minCells, zoneLabels.minCells);
+  wireNumberToRange(postControls.maxDegree, postLabels.maxDegree);
+  wireNumberToRange(postControls.detour, postLabels.detour);
+  ['l1','l2','l3'].forEach(layerKey=>{
+    wireNumberToRange(postControls[layerKey].threshold, postLabels[layerKey].threshold);
+    wireNumberToRange(postControls[layerKey].fraction, postLabels[layerKey].fraction);
+    wireNumberToRange(postControls[layerKey].snap, postLabels[layerKey].snap);
+    wireNumberToRange(postControls[layerKey].sampleStep, postLabels[layerKey].sampleStep);
+  });
+  wireNumberToRange(terrainControls.scale, terrainLabels.scale);
+  wireNumberToRange(terrainControls.octaves, terrainLabels.octaves);
+  wireNumberToRange(terrainControls.range, terrainLabels.range);
+  wireNumberToRange($('exGrid'), $('exGridVal'));
+  wireNumberToRange($('exDensity'), $('exDensityVal'));
+}
+
+// defaults
+// Matches the baseline the user always sets by hand before tweaking anything
+// else, so a fresh load already reflects it instead of requiring a manual
+// reset every time (see chat: curve=0, point influence=1, L1=15/L2=0/L3=0,
+// suitable-height 0.3..0.76, max grade 0.1, slope penalty 2, road height
+// 0.3..0.76, start offset 0, post-processing threshold/overlap at their
+// per-layer minimums, heightmap resolution 400, forest zones off).
+controls.l1.seed.value = 20260910;
+controls.l1.count.value = 15;
+controls.l1.spacing.value = 1.0;
+controls.l1.loop.value = 0.6;
+controls.l1.curve.value = 0;
+controls.l1.terrainMinH.value = 0.3;
+controls.l1.terrainMaxH.value = 0.76;
+controls.l1.terrainPointInfluence.value = 1;
+controls.l1.terrainMaxGrade.value = 0.1;
+controls.l1.terrainSlopeCost.value = 2;
+controls.l1.roadMinH.value = 0.3;
+controls.l1.roadMaxH.value = 0.76;
+controls.l1.roadStartOffset.value = 0;
+controls.l1.roadAttraction.value = 0;
+controls.l1.terrainRes.value = 200;
+
+controls.l2.seed.value = 314159265;
+controls.l2.count.value = 0;
+controls.l2.tether.value = 220;
+controls.l2.minTether.value = 25;
+controls.l2.spacing.value = 0.7;
+controls.l2.loop.value = 0.35;
+controls.l2.curve.value = 0;
+controls.l2.terrainMinH.value = 0.3;
+controls.l2.terrainMaxH.value = 0.76;
+controls.l2.terrainPointInfluence.value = 1;
+controls.l2.terrainMaxGrade.value = 0.1;
+controls.l2.terrainSlopeCost.value = 2;
+controls.l2.roadMinH.value = 0.3;
+controls.l2.roadMaxH.value = 0.76;
+controls.l2.roadStartOffset.value = 0;
+controls.l2.roadAttraction.value = 0;
+controls.l2.terrainRes.value = 400;
+
+controls.l3.seed.value = 271828182;
+controls.l3.count.value = 0;
+controls.l3.tether.value = 90;
+controls.l3.minTether.value = 12;
+controls.l3.spacing.value = 0.35;
+controls.l3.loop.value = 0.6;
+controls.l3.curve.value = 0;
+controls.l3.terrainMinH.value = 0.3;
+controls.l3.terrainMaxH.value = 0.76;
+controls.l3.terrainPointInfluence.value = 1;
+controls.l3.terrainMaxGrade.value = 0.1;
+controls.l3.terrainSlopeCost.value = 2;
+controls.l3.roadMinH.value = 0.3;
+controls.l3.roadMaxH.value = 0.76;
+controls.l3.roadStartOffset.value = 0;
+controls.l3.roadAttraction.value = 0;
+controls.l3.terrainRes.value = 800;
+
+zoneControls.clearance.value = 30;
+zoneControls.cell.value = 16;
+zoneControls.minCells.value = 6;
+
+// "Proximity threshold" / "Acceptable overlap" at each layer's own slider minimum
+// (40/40m for L1, 20/20m for L2, 10/10m for L3) -- the user always drags both
+// all the way down. Snap distance ("Merge nearby junctions") and resample
+// frequency were not part of that request, so they keep their existing tuned
+// per-layer defaults.
+postControls.maxDegree.value = 4;
+postControls.detour.value = 1.5;
+
+postControls.l1.threshold.value = 40;
+postControls.l1.fraction.value = 40;
+postControls.l1.snap.value = 80;
+postControls.l1.sampleStep.value = 10;
+
+postControls.l2.threshold.value = 20;
+postControls.l2.fraction.value = 20;
+postControls.l2.snap.value = 40;
+postControls.l2.sampleStep.value = 10;
+
+postControls.l3.threshold.value = 10;
+postControls.l3.fraction.value = 10;
+postControls.l3.snap.value = 20;
+postControls.l3.sampleStep.value = 10;
+
+terrainControls.seed.value = 424242;
+terrainControls.km.value = 20;
+terrainControls.scale.value = 0.03;
+terrainControls.octaves.value = 4;
+terrainControls.range.value = 100;
+
+document.querySelectorAll('input[name="terrainSource"]').forEach(radio=>{
+  radio.addEventListener('change', ()=>{
+    const isImg = document.querySelector('input[name="terrainSource"]:checked').value === 'img';
+    $('terrainProcFields').style.display = isImg ? 'none' : '';
+    $('terrainImgFields').style.display = isImg ? '' : 'none';
+    regenerate();
+  });
+});
+
+function rasterizeUploadedImage(cols, rows){
+  if(!uploadedImage) return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = cols; canvas.height = rows;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(uploadedImage, 0, 0, cols, rows);
+  const imgData = ctx.getImageData(0,0,cols,rows);
+  return heightmapFromImageData(imgData, cols, rows);
+}
+
+terrainControls.file.addEventListener('change', (ev)=>{
+  const file = ev.target.files[0];
+  if(!file) return;
+  $('terrainFileStatus').textContent = 'loading...';
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      uploadedImage = img;
+      $('terrainFileStatus').textContent = file.name + ' (source ' + img.width + '×' + img.height + ')';
+      regenerate();
+    };
+    img.onerror = ()=>{ $('terrainFileStatus').textContent = 'could not read file'; };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+$('exGrid').value = 100;
+$('exDensity').value = 10;
+$('exGrid').addEventListener('input', ()=>{ $('exGridVal').value = $('exGrid').value; });
+$('exDensity').addEventListener('input', ()=>{ $('exDensityVal').value = $('exDensity').value; });
+$('exGridVal').value = $('exGrid').value;
+$('exDensityVal').value = $('exDensity').value;
+
+$('regenBtn').addEventListener('click', regenerate);
+$('randAllBtn').addEventListener('click', randomizeAllSeeds);
+$('exportSvgBtn').addEventListener('click', exportSVG);
+$('exportJsonBtn').addEventListener('click', exportJSON);
+document.querySelectorAll('button.dice').forEach(btn=>{
+  btn.addEventListener('click', ()=> randomizeSeed(btn.dataset.layer));
+});
+
+Object.keys(controls).forEach(layerKey=>{
+  const level = LAYER_LEVEL[layerKey];
+  Object.values(controls[layerKey]).forEach(inp=>{
+    inp.addEventListener('input', refreshLabels);
+    inp.addEventListener('change', ()=> regenerateFrom(level));
+  });
+});
+
+[zoneControls.clearance, zoneControls.cell, zoneControls.minCells].forEach(inp=>{
+  inp.addEventListener('input', refreshZoneLabels);
+  inp.addEventListener('change', refreshZonesOnly);
+});
+zoneControls.show.addEventListener('change', refreshZonesOnly);
+
+['l1','l2','l3'].forEach(layerKey=>{
+  [postControls[layerKey].threshold, postControls[layerKey].fraction, postControls[layerKey].snap, postControls[layerKey].sampleStep].forEach(inp=>{
+    inp.addEventListener('input', refreshPostLabels);
+    inp.addEventListener('change', refreshPostProcessingOnly);
+  });
+});
+[postControls.prune, postControls.cross, postControls.maxDegree, postControls.detour].forEach(inp=>{
+  inp.addEventListener('change', refreshPostProcessingOnly);
+});
+
+[terrainControls.scale, terrainControls.octaves, terrainControls.range].forEach(inp=>{
+  inp.addEventListener('input', refreshTerrainLabels);
+  inp.addEventListener('change', regenerate);
+});
+terrainControls.enabled.addEventListener('change', regenerate);
+terrainControls.seed.addEventListener('change', regenerate);
+terrainControls.show.addEventListener('change', ()=>{
+  if(!state) return;
+  state.terrainVisible = terrainOpts().enabled && terrainControls.show.checked;
+  render(state);
+});
+
+terrainControls.km.addEventListener('input', refreshTerrainLabels);
+
+wireAllNumberMirrors();
+regenerate();
+</script>
+
+</body>
+</html>
